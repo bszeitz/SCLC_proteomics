@@ -1,6 +1,9 @@
 ---
 title: "Figure S1"
-output: html_notebook
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
 ---
 
 ```{r Load packages}
