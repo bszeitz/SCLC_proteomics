@@ -1,0 +1,222 @@
+---
+title: "RNA-Seq data retrieval and processing"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+
+
+# Load packages and functions
+
+
+```{r }
+source("Install_load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+# George et al. data
+
+
+```{r }
+
+George.annotation <- read_in_with_rowname("Files/George_annotation",F)
+George.raw <- read_in_with_rowname("Files/George_data_RNA_Seq_mRNA_median_all_sample_Zscores",F)
+colnames(George.raw)[3:ncol(George.raw)] <- unlist(lapply(colnames(George.raw)[3:ncol(George.raw)], function(x){gsub("sclc_ucologne_2015_","",x)}))
+row.names(George.raw) <- paste(George.raw$Hugo_Symbol, seq(1:nrow(George.raw)), sep="_")
+George.raw <- George.raw[,-c(1:2)]
+
+George.annotation$Sample %in% colnames(George.raw)
+George.raw.categorized <- George.raw[,George.annotation$Sample]
+
+summary(factor(George.annotation$`Subtype assignment`))
+
+export_with_rowname(George.raw.categorized, "Files/George_expression_Zscores",T)
+
+
+George.FPKM.raw <- read.delim("Files/George_data_RNA_Seq_expression_median.txt")
+row.names(George.FPKM.raw) <- paste(George.FPKM.raw$Hugo_Symbol,row.names(George.FPKM.raw),  sep="_")
+all(row.names(George.FPKM.raw) %in% row.names(George.Zscore))
+George.FPKM <- George.FPKM.raw[,-c(1:2)]
+colnames(George.FPKM) <- unlist(lapply(colnames(George.FPKM), function(x){
+  gsub("sclc_ucologne_2015_", "",x )
+}))
+George.FPKM <- George.FPKM[,George.annotation$Sample]
+export_with_rowname(George.FPKM, "Files/George_expression_FPKM", T)
+
+
+George.FPKM.for.SSGEA <- George.FPKM
+George.FPKM.for.SSGEA$Gene <- unlist(lapply(row.names(George.FPKM.for.SSGEA),
+                                                        function(x){strsplit(x, split="_")[[1]][1]}))
+duplicated.gene.names <- George.FPKM.for.SSGEA[duplicated(George.FPKM.for.SSGEA$Gene),"Gene"]
+to.delete <- vector()
+
+for (i in 1:length(duplicated.gene.names)){
+  sub.table <- George.FPKM.for.SSGEA[George.FPKM.for.SSGEA$Gene==duplicated.gene.names[i],]
+  sub.table$RowSum <- rowSums(sub.table[1:52])
+  sub.table <- sub.table[order(sub.table$RowSum, decreasing = T),]
+  selected <- row.names(sub.table)[1]
+  to.delete <- c(to.delete, row.names(sub.table)[-1])
+}
+
+George.FPKM.for.SSGEA.noduplGene <- George.FPKM.for.SSGEA[!row.names(George.FPKM.for.SSGEA) %in% to.delete,]
+row.names(George.FPKM.for.SSGEA.noduplGene) <- George.FPKM.for.SSGEA.noduplGene$Gene
+George.FPKM.for.SSGEA.noduplGene$Gene <- NULL
+George.FPKM.for.SSGEA.noduplGene.rowSum50 <- subset(George.FPKM.for.SSGEA.noduplGene, rowSums(George.FPKM.for.SSGEA.noduplGene) > 50)
+
+save_as_gct(George.FPKM.for.SSGEA.noduplGene.rowSum50, "Files/George_expression_FPKM_for_ssGSEA.gct")
+
+
+```
+
+
+# CCLE data
+
+
+```{r Load data}
+Annot <- read.delim("Files/CCLE_Cell_lines_annotations_20181226.txt")
+Annot.SCLC <- Annot[Annot$tcga_code =="SCLC" & !is.na(Annot$tcga_code),]
+
+#Expr <- read.delim("Files/CCLE_RNAseq_rsem_genes_tpm_20180929.txt")
+#save(Expr, file="RData/CCLE_RNAseq_rsem_genes_tpm_20180929.RData")
+load("RData/CCLE_RNAseq_rsem_genes_tpm_20180929.RData")
+
+```
+
+
+
+```{r Filter Expr table}
+
+Expr.SCLC <- cbind(Expr[,c(1,2)],Expr[,colnames(Expr) %in% Annot.SCLC$CCLE_ID])
+Annot.SCLC.Expr <- Annot.SCLC[Annot.SCLC$CCLE_ID %in% colnames(Expr.SCLC),]
+
+```
+
+
+```{r Get gene names, eval=F}
+mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+genes <-  unlist(lapply(Expr.SCLC$gene_id, function(x){strsplit(x, split=".", fixed = T)[[1]][1]}))
+gene_IDs <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),
+              values = genes, mart= mart)
+
+save(gene_IDs, file="RData/ENSG_to_geneID.RData")
+
+```
+
+
+
+```{r Filter for rows with HGNC gene ID}
+load("RData/ENSG_to_geneID.RData")
+gene_IDs.complete <- gene_IDs[gene_IDs$hgnc_symbol!="",]
+nrow(gene_IDs)
+nrow(gene_IDs.complete)
+nrow(unique(gene_IDs.complete))
+
+Expr.SCLC$ensembl_gene_id <- unlist(lapply(Expr.SCLC$gene_id, function(x){strsplit(x, split=".", fixed = T)[[1]][1]}))
+
+Expr.SCLC.HGNC <- merge(gene_IDs.complete, Expr.SCLC, by="ensembl_gene_id")
+
+Expr.SCLC.HGNC[duplicated(Expr.SCLC.HGNC$hgnc_symbol),"hgnc_symbol"] # we might need to deal with these later (but only 13 occurrences...)
+
+Expr.SCLC.HGNC$Row.name <- paste(Expr.SCLC.HGNC$gene_id, row.names(Expr.SCLC.HGNC), sep="_")
+
+
+Row.to.Gene <- Expr.SCLC.HGNC[,c("Row.name", "hgnc_symbol")]
+
+Expr.table <- Expr.SCLC.HGNC[,-c(1:4,55)]
+row.names(Expr.table) <- Expr.SCLC.HGNC$Row.name
+```
+
+```{r }
+Rudin <- as.data.frame(read_xlsx("Files/Rudin2019_categorized_samples.xlsx"))
+Rudin$Common.Name <-  unlist(lapply(Rudin$Name, function(x){gsub("-","",x)}))
+Annot.SCLC.Expr$Common.Name <- unlist(lapply(Annot.SCLC.Expr$CCLE_ID, function(x){strsplit(x, split="_", fixed=T)[[1]][1]}))
+
+Annot.SCLC.Expr <- merge(Annot.SCLC.Expr, Rudin, by="Common.Name")
+```
+
+
+```{r }
+row.names(Annot.SCLC.Expr) <- Annot.SCLC.Expr$CCLE_ID
+Annot.SCLC.Expr <- Annot.SCLC.Expr[colnames(Expr.table),]
+summary(as.factor(Annot.SCLC.Expr$`Subtype assignment`))
+
+Annotation <- Annot.SCLC.Expr[,c("Common.Name", "CCLE_ID", "depMapID", "Pathology", "Site_Of_Finding", "Characteristics", "Subtype assignment")]
+
+```
+
+
+```{r limma start}
+d0 <- DGEList(Expr.table) # Create DGEList object
+
+d0 <- calcNormFactors(d0) # Calculate normalization factors
+
+drop <- which(apply(cpm(d0), 1, max) < 50) # Filter out the low-expressed genes
+d <- d0[-drop,] 
+dim(d) # number of genes left
+```
+
+
+```{r }
+row.names(Row.to.Gene) <- Row.to.Gene$Row.name
+Row.to.Gene.filtered <- Row.to.Gene[row.names(d),]
+all(row.names(d) == row.names(Row.to.Gene.filtered))
+row.names(d) <- Row.to.Gene.filtered$hgnc_symbol
+```
+
+```{r Voom transformation and calculation of variance weights}
+group <- Annotation$`Subtype assignment`
+group <-  unlist(lapply(group, function(x){gsub("-",".",x)}))
+
+mod.mat <- model.matrix(~0 + group)
+y <- voom(d, mod.mat, plot = T)
+
+```
+
+```{r Fitting linear models, eval=F}
+fit <- lmFit(y, mod.mat)
+
+comparisons <- c("SCLC-N-SCLC-A", "SCLC-P-SCLC-A", "SCLC-Y-SCLC-A", "SCLC-P-SCLC-N", "SCLC-Y-SCLC-N", "SCLC-Y-SCLC-P")
+
+comparisons.trans <- list(makeContrasts(groupSCLC.N - groupSCLC.A, levels = colnames(coef(fit))), 
+                          makeContrasts(groupSCLC.P - groupSCLC.A, levels = colnames(coef(fit))),
+                          makeContrasts(groupSCLC.Y - groupSCLC.A, levels = colnames(coef(fit))), 
+                          makeContrasts(groupSCLC.P - groupSCLC.N, levels = colnames(coef(fit))), 
+                          makeContrasts(groupSCLC.Y - groupSCLC.N, levels = colnames(coef(fit))), 
+                          makeContrasts(groupSCLC.Y - groupSCLC.P, levels = colnames(coef(fit))))
+
+
+Trans.ST  <- data.frame(Gene = row.names(d))
+
+for (i in 1:length(comparisons.trans)){
+  tmp <- contrasts.fit(fit, comparisons.trans[[i]])
+  tmp <- eBayes(tmp)
+  top.table <- topTable(tmp, sort.by = "P", n = Inf)
+  top.table$Rank <- -log10(top.table$P.Value) * top.table$logFC
+  colnames(top.table) <- paste(colnames(top.table), paste0("(",comparisons[i],")"), sep="")
+  top.table$Gene <- row.names(top.table)
+  Trans.ST <- merge(Trans.ST, top.table, all.x=T, by="Gene")
+}
+
+save(Trans.ST, file="RData/DEA_Subtypes_CCLE.RData")
+```
+
+
+
+```{r limma norm}
+load("RData/DEA_Subtypes_CCLE.RData")
+Norm.Expr <- cpm(Expr.table, log=TRUE, prior.count=3)
+```
+
+
+
+```{r Export files}
+export_with_rowname(Trans.ST, "Files/DEA_Subtypes_CCLE", F)
+export_with_rowname(Norm.Expr, "Files/CCLE_expression_normalized", T)
+export_with_rowname(Annotation, "Files/CCLE_annotation", F)
+export_with_rowname(Row.to.Gene, "Files/CCLE_rowname_to_geneID",F)
+
+```
+

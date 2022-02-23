@@ -1,0 +1,247 @@
+---
+title: "Figure S3"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+```{r }
+source("Install_load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+ 
+
+```{r}
+#loaded <- load("RData/DLL3_boxplot.RData")
+#loaded
+```
+
+
+```{r DLL3, fig.width=4, fig.height=2}
+
+#ggplot(DLL3, aes(x=Subtype, y=value, fill=Subtype))+ theme_classic()+# +geom_violin()  
+#  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_boxplot() + ylab("Z-score")+xlab("")+ggtitle("DLL3 (Q9NYJ7)")
+
+#ggsave(file="Figures/DLL3_boxplot.pdf")
+
+
+```
+
+```{r }
+loaded <- load("RData/NE_markers_heatmap.RData")
+loaded
+
+```
+
+
+
+
+```{r , fig.width=15, fig.height=8}
+draw(Heatmap(NE.expression, column_title ="NE and non-NE markers",
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = T, top_annotation = column.ha.NE, 
+             #column_split = 4, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             row_split = Zhang2018[row.names(NE.expression),"Type"],
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+```
+
+
+```{r }
+pdf(file="Figures/NE_markers_heatmap.pdf",width = 15, height = 8)
+draw(Heatmap(NE.expression, column_title ="NE and non-NE markers",
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = T, top_annotation = column.ha.NE, 
+             #column_split = 4, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             row_split = Zhang2018[row.names(NE.expression),"Type"],
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+dev.off()
+
+```
+
+
+```{r }
+loaded <- load("RData/EMT_markers_heatmap.RData")
+loaded
+
+```
+
+
+```{r , fig.width=15, fig.height=6}
+draw(Heatmap(EMT.expression, column_title ="Epithelial and mesenchymal markers",
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = T, top_annotation = column.ha.EMT, 
+             #column_split = 4, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             row_split = Kohn2014[row.names(EMT.expression),"Type"],
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+```
+
+
+```{r }
+pdf(file="Figures/EMT_markers_heatmap.pdf",width = 15, height = 6)
+draw(Heatmap(EMT.expression, column_title ="Epithelial and mesenchymal markers",
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = T, top_annotation = column.ha.EMT, 
+             #column_split = 4, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             row_split = Kohn2014[row.names(EMT.expression),"Type"],
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+dev.off()
+```
+
+
+
+
+```{r }
+loaded <- load("RData/Fig_NE_EMT_correlations.RData")
+loaded
+```
+
+
+```{r , fig.width=7, fig.height=5}
+
+my.comparisons <- list(c("Adherent","Semi-adherent"),
+                       c("Adherent","Suspension"),
+                       c("Semi-adherent","Suspension"))
+
+
+g1 <- ggplot(Annot.NE.EMT, aes(x=`Culture type`, y=NEscore, fill=`Culture type`))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("NE score")+xlab("Culture type")+  scale_fill_manual(values = c("#23b866", "#ef5675", "#7a5195"))+ 
+  stat_compare_means(comparisons = my.comparisons, method = "t.test") +ylim(-2.5,3)+ theme_classic()
+
+
+g2 <- ggplot(Annot.NE.EMT, aes(x=`Culture type`, y=EMTscore, fill=`Culture type`))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("EMT score")+xlab("Culture type")+  scale_fill_manual(values = c("#23b866", "#ef5675", "#7a5195"))+ 
+  stat_compare_means(comparisons = my.comparisons, method = "t.test") +ylim(-2.5,3)+ theme_classic()
+
+
+g <- ggarrange(g1, g2, common.legend=T)
+g
+
+ggsave(file="Figures/NE_EMT_vs_culture.pdf")
+
+
+```
+
+
+
+```{r , fig.width=7, fig.height=5}
+Annot.NE.EMT$`Cell line origin` <- factor(Annot.NE.EMT$`Cell line origin`, levels=c(
+  "lung", "pleural.effusion","metastatic"
+))
+
+my_comparisons <- list(c("lung","pleural.effusion"),c("lung","metastatic"), c("pleural.effusion", "metastatic"))
+
+
+g1 <- ggplot(Annot.NE.EMT, aes(x=`Cell line origin`, y=NEscore, fill=`Cell line origin`))+ theme_bw()+
+   geom_boxplot() + ylab("NE score")+xlab("Origin")+  scale_fill_manual(values = c("#3f8098", "lightblue", "#ffc3a0"))+
+  stat_compare_means(comparisons = my_comparisons, method = "t.test") +ylim(-2.5,3)+ theme_classic()
+
+
+g2 <- ggplot(Annot.NE.EMT, aes(x=`Cell line origin`, y=EMTscore, fill=`Cell line origin`))+ theme_bw()+ 
+   geom_boxplot() + ylab("EMT score")+xlab("Origin")+  scale_fill_manual(values = c("#3f8098", "lightblue", "#ffc3a0"))+
+  stat_compare_means(comparisons = my_comparisons, method = "t.test") +ylim(-2.5,3)+ theme_classic()
+
+g <- ggarrange(g1, g2, common.legend=T)
+g
+
+ggsave(file="Figures/NE_EMT_vs_origin.pdf")
+
+
+```
+
+
+```{r , fig.width=7, fig.height=5}
+Annot2 <- Annot.NE.EMT[Annot.NE.EMT$Chemo !="",]
+
+Annot2$Chemo <- factor(Annot2$Chemo, levels=c(
+  "chemo-naive", "post-chemo"
+))
+
+my_comparisons <- list(c("chemo-naive","post-chemo"))
+
+g1 <- ggplot(Annot2, aes(x=Chemo, y=NEscore, fill=Chemo))+ theme_bw()+
+   geom_boxplot() + ylab("NE score")+xlab("Chemo")+  scale_fill_manual(values = c("white", "brown"))+
+  stat_compare_means(comparisons = my_comparisons, method = "t.test") +ylim(-2.5,3)+ theme_classic()
+
+g2 <- ggplot(Annot2, aes(x=Chemo, y=EMTscore, fill=Chemo))+ theme_bw()+
+   geom_boxplot() + ylab("EMT score")+xlab("Chemo")+  scale_fill_manual(values = c("white", "brown"))+ 
+  stat_compare_means(comparisons = my_comparisons, method = "t.test") +ylim(-2.5,3)+ theme_classic()
+
+g <- ggarrange(g1, g2, common.legend=T)
+g
+
+ggsave(file="Figures/NE_EMT_vs_chemo.pdf")
+
+```
+
+
+```{r , fig.width=5, fig.height=4}
+cor.test(Annot.NE.EMT$NEscore, Annot.NE.EMT$EMTscore)
+
+culture.type <- Annot.NE.EMT$`Culture type`
+
+Annot.NE.EMT$Label <- ifelse(Annot.NE.EMT$Subtype=="SCLC-A" & Annot.NE.EMT$EMTscore < -1, Annot.NE.EMT$Sample, "")
+
+ggplot(Annot.NE.EMT, aes(x=NEscore, y=EMTscore, label=Label)) +
+  geom_point(aes(shape=culture.type, color=Subtype), size=3)+scale_shape_manual(values=c(16, 8, 15))+
+  geom_text_repel()+
+  scale_color_manual(values=c("#0000FE","#21FE06","gold","#FB02FE"))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  geom_smooth(method=lm)
+
+ggsave(file="Figures/NE_EMT_corr.pdf")
+
+
+```
+
+
+
+```{r }
+
+```
+
+
+
+
+
+
+

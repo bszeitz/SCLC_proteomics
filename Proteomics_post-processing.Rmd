@@ -1,0 +1,479 @@
+---
+title: "Proteomic data post-processing"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+
+
+# Load packages, functions and files
+
+
+```{r Load R files}
+source("Install_load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+
+```{r Load expression tables}
+CP.raw <- read_in_Perseus("Files/SCLC_CP_raw.txt", inj.order = F) # cell pellet (CP) data
+CM.raw <- read_in_Perseus("Files/SCLC_CM_raw.txt", inj.order = F) # culture media (CM) data
+# in both cases, protein annotations (such as protein description) were already added, as well as Gene name was extracted from the "Description" column
+
+```
+
+
+```{r Load annotations}
+Annot <- read.delim("Files/Proteomics_Cell_line_annotation.txt", check.names = F) #  Annotation table. The qPCR values are already min-max-scaled.
+
+colnames(CP.raw[[2]])[grep("Sample", colnames(CP.raw[[2]]))] <- "Sample"
+colnames(CM.raw[[2]])[grep("Sample", colnames(CM.raw[[2]]))] <- "Sample"
+
+CP.raw[[2]]$Sample <- ifelse(CP.raw[[2]]$Sample =="COR", "CORL311", CP.raw[[2]]$Sample) # COR was renamed to CORL311.
+CM.raw[[2]]$Sample <- ifelse(CM.raw[[2]]$Sample =="COR", "CORL311", CM.raw[[2]]$Sample)
+
+```
+
+
+```{r Create list of tables}
+
+Tables <- list(CP = list(Expr.raw = CP.raw[[1]],
+                         Annot = merge(CP.raw[[2]][,c("Sample", "MainID", "Replicate", "MSbatch")], Annot, by="Sample", all.x=T,sort =F),
+                         Info =CP.raw[[3]]),
+               CM = list(Expr.raw = CM.raw[[1]],
+                         Annot = merge(CM.raw[[2]][,c("Sample", "MainID", "Replicate", "MSbatch")], Annot, by="Sample", all.x=T,sort =F),
+                         Info = CM.raw[[3]]))
+row.names(Tables$CP$Annot) <- Tables$CP$Annot$MainID
+row.names(Tables$CM$Annot) <- Tables$CM$Annot$MainID
+Tables$CP$Annot <- Tables$CP$Annot[colnames(Tables$CP$Expr.raw),]
+Tables$CM$Annot <- Tables$CM$Annot[colnames(Tables$CM$Expr.raw),]
+
+Tables$CP$Annot$Data.Acquisiton <- ifelse(grepl("DDA",Tables$CP$Annot$MainID), "DDA", "DIA")
+Tables$CM$Annot$Data.Acquisiton <- ifelse(grepl("DDA",Tables$CM$Annot$MainID), "DDA", "DIA")
+
+```
+
+
+# Removal of measurements
+
+
+```{r Removal measurements before normalization}
+to.remove.CP <- c("SCLC20_DDA_R1", "SCLC26_DDA_R1", "SCLC29_DDA_R1") # these were repeated
+to.remove.CM <- c("SCLC08_B1_DDA_R1") # this had low quality
+
+Tables$CP$Expr.raw <- Tables$CP$Expr.raw[,!colnames(Tables$CP$Expr.raw) %in% to.remove.CP]
+Tables$CM$Expr.raw <- Tables$CM$Expr.raw[,!colnames(Tables$CM$Expr.raw) %in% to.remove.CM]
+
+Tables$CP$Annot <- Tables$CP$Annot[!row.names(Tables$CP$Annot) %in% to.remove.CP,]
+Tables$CM$Annot <- Tables$CM$Annot[!row.names(Tables$CM$Annot) %in% to.remove.CM,]
+
+```
+
+
+
+
+# Log2 transformation and median normalization
+
+
+```{r Log2 transform }
+Tables$CP$Expr <- as.data.frame(apply(Tables$CP$Expr.raw, 2, log2))
+Tables$CM$Expr <- as.data.frame(apply(Tables$CM$Expr.raw, 2, log2))
+```
+
+```{r Sample histograms before normalization, fig.width = 15, fig.height = 5}
+plot_sample_histograms(Tables$CP$Expr, "SCLC CP", "Before Normalization") + geom_vline(xintercept = grep(2,Tables$CP$Annot$MSbatch)[1]-1, colour="blue", size=1)
+plot_sample_histograms(Tables$CM$Expr, "SCLC CM", "Before Normalization") + geom_vline(xintercept = grep(2,Tables$CM$Annot$MSbatch)[1]-1, colour="blue", size=1)
+```
+
+
+
+
+```{r Median normalization}
+Tables$CP$Expr <- normalize_median(Tables$CP$Expr)
+Tables$CM$Expr <- normalize_median(Tables$CM$Expr)
+```
+
+
+```{r Sample histograms after normalization, fig.width = 15, fig.height = 5}
+plot_sample_histograms(Tables$CP$Expr, "SCLC CP", "After Median Normalization") + geom_vline(xintercept = grep(2,Tables$CP$Annot$MSbatch)[1]-1, colour="blue", size=1)
+plot_sample_histograms(Tables$CM$Expr, "SCLC CM", "After Median Normalization") + geom_vline(xintercept = grep(2,Tables$CM$Annot$MSbatch)[1]-1, colour="blue", size=1)
+```
+
+
+
+# Examine and merge technical replicates in the same batch
+
+
+```{r Correlation matrix between technical replicates from the same batch, fig.width=20, fig.height=20}
+
+heatmaps <- list()
+
+for (i in 1:2){
+  batch1 <- Tables[[i]]$Annot[Tables[[i]]$Annot$MSbatch ==1,"MainID"]
+  batch2 <- Tables[[i]]$Annot[Tables[[i]]$Annot$MSbatch ==2,"MainID"]
+   
+  col_fun = colorRamp2(c(0.85, 0.90,0.94,0.98, 1), c("lightblue", "white","orange","darkred","black"))
+  p1 <- as.ggplot(Heatmap(as.matrix(cor(Tables[[i]]$Expr[,batch1], use="pairwise.complete.obs")), 
+          column_title = paste0(names(Tables)[i],"\n  Batch 1 measurements"), 
+          col = col_fun,
+          row_split = Tables[[i]]$Annot[batch1,"Replicate"], 
+          column_split = Tables[[i]]$Annot[batch1,"Replicate"], 
+          cluster_row_slices = F, cluster_column_slices = F, row_title = NULL, show_column_names = F))
+  p2 <- as.ggplot(Heatmap(as.matrix(cor(Tables[[i]]$Expr[,batch2], use="pairwise.complete.obs")), 
+          column_title = paste0(names(Tables)[i],"\n  Batch 2 measurements"), 
+          col = col_fun,
+          row_split = Tables[[i]]$Annot[batch2,"Replicate"], 
+          column_split = Tables[[i]]$Annot[batch2,"Replicate"], 
+          cluster_row_slices = F, cluster_column_slices = F, row_title = NULL, show_column_names = F))
+  heatmaps[[i]] <- p1+p2
+}
+
+heatmaps[[1]] / heatmaps[[2]]
+
+```
+
+
+```{r Removal of SCLC09_B2_DDA_R1 and taking the median of technical replicates, eval=F}
+
+for (i in 1:2){
+  batch1 <- Tables[[i]]$Annot[Tables[[i]]$Annot$MSbatch ==1,"MainID"]
+  batch2 <- Tables[[i]]$Annot[Tables[[i]]$Annot$MSbatch ==2,"MainID"]
+  if (i ==2){
+    batch2 <- batch2[batch2!="SCLC09_B2_DDA_R1"]
+  }
+  batch1.expr.med <- median_of_repeated_measurements(Tables[[i]]$Expr,unique(Tables[[i]]$Annot[batch1,"Replicate"]),"_" )
+  colnames(batch1.expr.med) <- paste(colnames(batch1.expr.med), "Batch1", sep="_")
+  batch2.expr.med <- median_of_repeated_measurements(Tables[[i]]$Expr,unique(Tables[[i]]$Annot[batch2,"Replicate"]),"_" )
+  colnames(batch2.expr.med) <- paste(colnames(batch2.expr.med), "Batch2", sep="_")
+  Tables[[i]]$Expr.Med.withinBatch <- merge(batch1.expr.med, batch2.expr.med, by="row.names")
+  row.names(Tables[[i]]$Expr.Med.withinBatch) <- Tables[[i]]$Expr.Med.withinBatch$Row.names
+  Tables[[i]]$Expr.Med.withinBatch$Row.names <- NULL
+  Tables[[i]]$Annot.Med.withinBatch <- Tables[[i]]$Annot[,! colnames(Tables[[i]]$Annot) %in% c("MainID","MSorder", "MSorder.Cat",
+                                                                                               "Data.Acquisiton")]
+  Tables[[i]]$Annot.Med.withinBatch$MainID <- paste(Tables[[i]]$Annot.Med.withinBatch$Replicate,
+                                                    paste0("Batch",Tables[[i]]$Annot.Med.withinBatch$MSbatch),sep="_")
+  
+  Tables[[i]]$Annot.Med.withinBatch <- unique(Tables[[i]]$Annot.Med.withinBatch)
+  row.names(Tables[[i]]$Annot.Med.withinBatch) <- Tables[[i]]$Annot.Med.withinBatch$MainID
+}
+
+save(Tables, file="RData/Tables_afterTechReplMerge.RData")
+
+```
+
+
+
+```{r }
+load("RData/Tables_afterTechReplMerge.RData")
+
+```
+
+
+```{r Heatmaps before and after merging technical replicates, fig.width=25, fig.height=8}
+annot.columns <- c("Subtype", "ASCL1 qPCR", "NEUROD1 qPCR", "POU2F3 qPCR", "YAP1 qPCR", "Cell line origin",
+                   "Culture type", "MSbatch", "Data.Acquisiton")
+  
+draw(Heatmap(t(scale(t(Tables$CP$Expr))), 
+                     name="Z-score",
+             col=colorRamp2(c(-4, 0, 4), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = create_heatmapannot(Tables$CP$Annot, annot.columns, colorlist), 
+             cluster_columns = T, clustering_distance_rows = "euclidean",
+             column_split = 4, show_row_names = F, show_heatmap_legend = T, use_raster = T,
+             row_title = NULL,height  = unit(0.01, "cm")),
+             annotation_legend_side="bottom")
+
+draw(Heatmap(t(scale(t(Tables$CM$Expr))), 
+                     name="Z-score",
+             col=colorRamp2(c(-4, 0, 4), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = create_heatmapannot(Tables$CM$Annot, annot.columns, colorlist), 
+             cluster_columns = T, clustering_distance_rows = "euclidean",
+             column_split = 4, show_row_names = F, show_heatmap_legend = T, use_raster = T,
+             row_title = NULL,height  = unit(0.01, "cm")),
+             annotation_legend_side="bottom")
+
+annot.columns <- c("Subtype", "ASCL1 qPCR", "NEUROD1 qPCR", "POU2F3 qPCR", "YAP1 qPCR", "Cell line origin",
+                   "Culture type", "MSbatch")
+
+draw(Heatmap(t(scale(t(Tables$CP$Expr.Med.withinBatch))), 
+                     name="Z-score",
+             col=colorRamp2(c(-4, 0, 4), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = create_heatmapannot(Tables$CP$Annot.Med.withinBatch, annot.columns, colorlist), 
+             cluster_columns = T, clustering_distance_rows = "euclidean",
+             column_split = 4, show_row_names = F, show_heatmap_legend = T, use_raster = T,
+             row_title = NULL,height  = unit(0.01, "cm")),
+             annotation_legend_side="bottom")
+
+draw(Heatmap(t(scale(t(Tables$CM$Expr.Med.withinBatch))), 
+                     name="Z-score",
+             col=colorRamp2(c(-4, 0, 4), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = create_heatmapannot(Tables$CM$Annot.Med.withinBatch, annot.columns, colorlist), 
+             cluster_columns = T, clustering_distance_rows = "euclidean",
+             column_split = 4, show_row_names = F, show_heatmap_legend = T, use_raster = T,
+             row_title = NULL,height  = unit(0.01, "cm")),
+             annotation_legend_side="bottom")
+
+```
+
+
+
+
+```{r PCA plots before and after merging technical replicates, fig.width = 15, fig.height = 10}
+annot.columns <- c("Subtype", "Cell line origin",
+                   "Culture type", "MSbatch", "Data.Acquisiton")
+all(colnames(Tables$CP$Expr) == row.names(Tables$CP$Annot))
+all(colnames(Tables$CM$Expr) == row.names(Tables$CM$Annot))
+
+for (i in 1:length(annot.columns)){
+  print(ggbiplot(prcomp(t(na.omit(Tables$CP$Expr))),
+         circle=F, scale = T, 
+         labels=colnames(Tables$CP$Expr), 
+         groups = as.factor(Tables$CP$Annot[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CP\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
+  print(ggbiplot(prcomp(t(na.omit(Tables$CM$Expr))),
+         circle=F, scale = T, 
+         labels=colnames(Tables$CM$Expr), 
+         groups = as.factor(Tables$CM$Annot[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CM\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
+}
+
+
+annot.columns <- c("Subtype", "Cell line origin",
+                   "Culture type", "MSbatch")
+all(colnames(Tables$CP$Expr.Med.withinBatch) == row.names(Tables$CP$Annot.Med.withinBatch))
+all(colnames(Tables$CM$Expr.Med.withinBatch) == row.names(Tables$CM$Annot.Med.withinBatch))
+
+for (i in 1:length(annot.columns)){
+  print(ggbiplot(prcomp(t(na.omit(Tables$CP$Expr.Med.withinBatch))),
+         circle=F, scale = T, 
+         labels=colnames(Tables$CP$Expr.Med.withinBatch), 
+         groups = as.factor(Tables$CP$Annot.Med.withinBatch[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CP (median)\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
+  print(ggbiplot(prcomp(t(na.omit(Tables$CM$Expr.Med.withinBatch))),
+         circle=F, scale = T, 
+         labels=colnames(Tables$CM$Expr.Med.withinBatch), 
+         groups = as.factor(Tables$CM$Annot.Med.withinBatch[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CM (median)\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
+}
+
+
+```
+
+
+
+
+
+```{r Cleaned PCA plots before and after merging technical replicates, fig.width = 15, fig.height = 5}
+i= grep("batch", annot.columns)
+
+CP.PCA.before <- ggbiplot(prcomp(t(na.omit(Tables$CP$Expr.Med.withinBatch))),
+         circle=F, scale = T, 
+         groups = as.factor(Tables$CP$Annot.Med.withinBatch[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CP\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+CM.PCA.before <- ggbiplot(prcomp(t(na.omit(Tables$CM$Expr.Med.withinBatch))),
+         circle=F, scale = T, 
+         groups = as.factor(Tables$CM$Annot.Med.withinBatch[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CM\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ggarrange(CP.PCA.before, CM.PCA.before)
+
+```
+
+
+
+
+
+# Batch effect correction
+
+
+```{r Filter for min 1 valid value}
+Tables$CP$Expr.Med.withinBatch.F <- filter_missingvalues(Tables$CP$Expr.Med.withinBatch, 1)
+Tables$CM$Expr.Med.withinBatch.F <- filter_missingvalues(Tables$CM$Expr.Med.withinBatch, 1)
+```
+
+
+```{r Batch correction,eval=F}
+Tables$CP$Expr.Med.withinBatch.F.BatchCorr <- batch_correction_LM(df = Tables$CP$Expr.Med.withinBatch.F, 
+                                                                  annot = Tables$CP$Annot.Med.withinBatch[,c("MainID", "MSbatch")])
+Tables$CM$Expr.Med.withinBatch.F.BatchCorr <- batch_correction_LM(df = Tables$CM$Expr.Med.withinBatch.F, 
+                                                                  annot = Tables$CM$Annot.Med.withinBatch[,c("MainID", "MSbatch")])
+save(Tables, file="RData/Tables_afterBatchCorr.RData")
+```
+
+
+```{r }
+load("RData/Tables_afterBatchCorr.RData")
+```
+
+
+```{r Heatmaps after batch correction, fig.width=25, fig.height=8}
+Tables$CP$Expr.Med.withinBatch.F.BatchCorr <- Tables$CP$Expr.Med.withinBatch.F.BatchCorr[,row.names(Tables$CP$Annot.Med.withinBatch)]
+Tables$CM$Expr.Med.withinBatch.F.BatchCorr <- Tables$CM$Expr.Med.withinBatch.F.BatchCorr[,row.names(Tables$CM$Annot.Med.withinBatch)]
+
+annot.columns <- c("Subtype", "ASCL1 qPCR", "NEUROD1 qPCR", "POU2F3 qPCR", "YAP1 qPCR", "Cell line origin",
+                   "Culture type", "MSbatch")
+
+draw(Heatmap(t(scale(t(Tables$CP$Expr.Med.withinBatch.F.BatchCorr))), 
+                     name="Z-score",
+             col=colorRamp2(c(-4, 0, 4), c("blue","white", "red")),
+                     cluster_rows = F, 
+             top_annotation = create_heatmapannot(Tables$CP$Annot.Med.withinBatch, annot.columns, colorlist), 
+             cluster_columns = T, clustering_distance_columns = "pearson",
+             #column_split = 4, 
+             show_row_names = F, show_heatmap_legend = T, 
+             row_title = NULL,height  = unit(0.01, "cm")),
+             annotation_legend_side="bottom")
+
+draw(Heatmap(t(scale(t(Tables$CM$Expr.Med.withinBatch.F.BatchCorr))), 
+                     name="Z-score",
+             col=colorRamp2(c(-4, 0, 4), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = create_heatmapannot(Tables$CM$Annot.Med.withinBatch, annot.columns, colorlist), 
+             cluster_columns = T, clustering_distance_columns = "pearson",
+             #column_split = 4, 
+             show_row_names = F, show_heatmap_legend = T, 
+             row_title = NULL,height  = unit(0.01, "cm")),
+             annotation_legend_side="bottom")
+
+```
+
+
+
+
+
+
+```{r PCA plots after batch correction, fig.width = 15, fig.height = 5}
+annot.columns <- c("Subtype", "Cell line origin",
+                   "Culture type", "MSbatch")
+all(colnames(Tables$CP$Expr.Med.withinBatch.F.BatchCorr) == row.names(Tables$CP$Annot.Med.withinBatch))
+all(colnames(Tables$CM$Expr.Med.withinBatch.F.BatchCorr) == row.names(Tables$CM$Annot.Med.withinBatch))
+
+for (i in 1:length(annot.columns)){
+  print(ggbiplot(prcomp(t(na.omit(Tables$CP$Expr.Med.withinBatch.F.BatchCorr))),
+         circle=F, scale = T, 
+         labels=colnames(Tables$CP$Expr.Med.withinBatch.F.BatchCorr), 
+         groups = as.factor(Tables$CP$Annot.Med.withinBatch[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CP (median)\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
+  print(ggbiplot(prcomp(t(na.omit(Tables$CM$Expr.Med.withinBatch.F.BatchCorr))),
+         circle=F, scale = T, 
+         labels=colnames(Tables$CM$Expr.Med.withinBatch.F.BatchCorr), 
+         groups = as.factor(Tables$CM$Annot.Med.withinBatch[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CM (median)\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
+}
+
+
+```
+
+
+
+
+```{r Cleaned PCA plots after batch correction, fig.width = 15, fig.height = 5}
+i= grep("batch", annot.columns)
+
+CP.PCA.after <- ggbiplot(prcomp(t(na.omit(Tables$CP$Expr.Med.withinBatch.F.BatchCorr))),
+         circle=F, scale = T, 
+         #labels=colnames(Tables$CP$Expr), 
+         groups = as.factor(Tables$CP$Annot.Med.withinBatch[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CP\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+CM.PCA.after <- ggbiplot(prcomp(t(na.omit(Tables$CM$Expr.Med.withinBatch.F.BatchCorr))),
+         circle=F, scale = T, 
+         #labels=colnames(Tables$CM$Expr.Med.withinBatch), 
+         groups = as.factor(Tables$CM$Annot.Med.withinBatch[,annot.columns[i]]),
+         ellipse = T,
+         var.axes	=F) + 
+  ggtitle(paste0("CM\n  Categorized by: ", annot.columns[i]))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ggarrange(CP.PCA.after, CM.PCA.after)
+
+```
+
+
+
+
+```{r }
+Fig_QC_PCA_PVCA_HC <- Tables
+save(Fig_QC_PCA_PVCA_HC, file="RData/Fig_QC_PCA_PVCA_HC.RData")
+```
+
+
+# Merging replicates from different batch
+
+
+
+```{r Mean of replicates from different batches, eval=F}
+
+for (i in 1:2){
+  Tables[[i]]$Annot.AvrRepl <- Tables[[i]]$Annot.Med.withinBatch
+  Tables[[i]]$Annot.AvrRepl$MainID <- unlist(lapply(Tables[[i]]$Annot.AvrRepl$Replicate, function(x){
+    strsplit(x, split="_")[[1]][1]
+  }))
+  Tables[[i]]$Annot.AvrRepl$Replicate <- NULL
+  Tables[[i]]$Annot.AvrRepl$MSbatch <- NULL
+  Tables[[i]]$Annot.AvrRepl <- unique(Tables[[i]]$Annot.AvrRepl)
+  Tables[[i]]$Expr.Med.withinBatch.F.BatchCorr.Avr <- mean_of_repeated_measurements(Tables[[i]]$Expr.Med.withinBatch.F.BatchCorr,
+                                                                                      Tables[[i]]$Annot.AvrRepl$MainID,
+                                                                                    "_" )
+}
+
+save(Tables, file="RData/Tables_afterAveragingReplicates_fromDiffBatch.RData")
+
+```
+
+
+
+```{r }
+load("RData/Tables_afterAveragingReplicates_fromDiffBatch.RData")
+```
+
+
+# Export tables
+
+
+
+```{r Remove non-SCLC samples and export}
+
+SCLC.samples <- Tables$CP$Annot.AvrRepl[!is.na(Tables$CP$Annot.AvrRepl$Subtype),"MainID"]
+cell.line.IDs <- Tables$CP$Annot.AvrRepl[!is.na(Tables$CP$Annot.AvrRepl$Subtype),"Sample"]
+CP.expr.final <- filter_missingvalues(Tables$CP$Expr.Med.withinBatch.F.BatchCorr.Avr[,SCLC.samples], 80)
+colnames(CP.expr.final) <- cell.line.IDs
+CM.expr.final <- filter_missingvalues(Tables$CM$Expr.Med.withinBatch.F.BatchCorr.Avr[,SCLC.samples], 80)
+colnames(CM.expr.final) <- cell.line.IDs
+
+#export_with_rowname(Tables$CP$Expr.Med.withinBatch.F.BatchCorr.Avr[,SCLC.samples], "Files/CP_expression_full",T)
+#export_with_rowname(Tables$CM$Expr.Med.withinBatch.F.BatchCorr.Avr[,SCLC.samples], "Files/CM_expression_full",T)
+#export_with_rowname(CP.expr.final, "Files/CP_expression_filtered",T)
+#export_with_rowname(CM.expr.final, "Files/CM_expression_filtered",T)
+#export_with_rowname(Tables$CP$Info, "Files/CP_protein_info_full",T)
+#export_with_rowname(Tables$CM$Info, "Files/CM_protein_info_full",T)
+```
+
+

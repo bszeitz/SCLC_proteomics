@@ -1,0 +1,331 @@
+---
+title: "Figure 4c and S8"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+```{r Load }
+source("Install_load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+ 
+```{r Load files}
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+CP.expr.imp <- read_in_with_rowname("Files/CP_expression_filtered_imputed",F)[,Annot$Sample]
+CM.expr.imp <- read_in_with_rowname("Files/CM_expression_filtered_imputed",F)[,Annot$Sample]
+Secreted.proteins <- read_in_with_rowname("Files/Tier1_and_2_secreted",F)[,1]
+CM.expr.imp.secr <- CM.expr.imp[row.names(CM.expr.imp) %in% Secreted.proteins,]
+prot.to.gene <- read_in_with_rowname("Files/Protein_to_Gene",F)
+splsda.res <- read_in_with_rowname("Files/sPLSDA_results",F)
+splsda.res$Accession <- row.names(splsda.res)
+```
+
+
+```{r }
+splsda.res$Accession_Data <- splsda.res$Accession
+splsda.res$Accession <- unlist(lapply(splsda.res$Accession_Data, function(x){
+  strsplit(x, split="_")[[1]][1]
+}))
+splsda.res$Data <- unlist(lapply(splsda.res$Accession_Data, function(x){
+  strsplit(x, split="_")[[1]][2]
+}))
+
+```
+
+
+```{r }
+splsda.res[duplicated(splsda.res$Accession),]
+```
+
+
+
+```{r }
+splsda.res <- splsda.res[splsda.res$Accession_Data !="P09382_CP" & 
+                                           splsda.res$Accession_Data !="P01137_CP" ,]
+
+Expr.both.comp <- t(scale(t(rbind(CP.expr.imp[splsda.res[splsda.res$Data =="CP","Accession"],],
+                        CM.expr.imp[splsda.res[splsda.res$Data =="CM","Accession"],]))))
+
+```
+
+
+
+
+```{r , fig.width=10, fig.height=5}
+
+splsda.res <- splsda.res[order(splsda.res$Rank),]
+row.names(splsda.res) <- splsda.res$Accession
+
+grep("Q13562", row.names(splsda.res))
+grep("Q9UKI9", row.names(splsda.res))
+grep("P46937", row.names(splsda.res))
+
+
+set.seed(123)  
+HM <- Heatmap(Expr.both.comp, km=5) 
+HM <- draw(HM)
+
+r.dend <- row_dend(HM)
+rcl.list <- row_order(HM) 
+
+#lapply(rcl.list, function(x) length(x))  #check/confirm size clusters
+
+for (i in 1:length(row_order(HM))){
+  if (i == 1) {
+    clu <- t(t(row.names(Expr.both.comp[row_order(HM)[[i]],])))
+    out <- cbind(clu, paste("cluster", i, sep=""))
+    colnames(out) <- c("GeneID", "Cluster")
+  } else {
+    clu <- t(t(row.names(Expr.both.comp[row_order(HM)[[i]],])))
+    clu <- cbind(clu, paste("cluster", i, sep=""))
+    out <- rbind(out, clu)
+  }
+}
+
+row.names(out) <- out[,1]
+splsda.res <- merge(splsda.res, out, by="row.names")
+prot.to.gene$Row.names <- prot.to.gene$Protein
+splsda.res <- merge(splsda.res, prot.to.gene, by= "Row.names")
+
+splsda.res <- splsda.res[order(abs(splsda.res$Rank), decreasing = T),]
+
+splsda.res$Name <- splsda.res$Gene
+
+
+
+splsda.res$Cluster <- ifelse(splsda.res$Comp ==3 & splsda.res$Cluster !="cluster4", "cluster6",splsda.res$Cluster)
+
+
+```
+
+
+
+```{r }
+splsda.res$Subtype <- splsda.res$Cluster
+splsda.res$Subtype <- ifelse(splsda.res$Cluster == "cluster1", "UP in Y", splsda.res$Subtype)
+splsda.res$Subtype <- ifelse(splsda.res$Cluster == "cluster2", "UP in NvsA", splsda.res$Subtype)
+splsda.res$Subtype <- ifelse(splsda.res$Cluster == "cluster3", "UP in AvsN", splsda.res$Subtype)
+splsda.res$Subtype <- ifelse(splsda.res$Cluster == "cluster4", "UP in P", splsda.res$Subtype)
+splsda.res$Subtype <- ifelse(splsda.res$Cluster == "cluster5", "DOWN in Y", splsda.res$Subtype) #UP in P
+splsda.res$Subtype <- ifelse(splsda.res$Cluster == "cluster6", "DOWN in P", splsda.res$Subtype)
+
+
+export_with_rowname(splsda.res,"Files/sPLSDA_results_extended",F)
+
+
+```
+
+
+
+```{r , fig.width=10, fig.height=20}
+
+row_ha <- rowAnnotation(LoadingWeigth = anno_barplot(splsda.res$Rank,
+                                                     gp = gpar(fill = splsda.res$Comp), width = unit(3, "cm")))
+
+
+row_ha <- rowAnnotation(LoadingWeigth = anno_barplot(splsda.res$value.var,
+                                                     gp = gpar(fill = ifelse(abs(splsda.res$value.var) > 0.2, 2,0)), width = unit(3, "cm")),
+                        Freq = anno_barplot(splsda.res$Freq,
+                                            gp = gpar(fill = ifelse(splsda.res$Freq > 0.5, 6,0)), width = unit(2, "cm")),
+                        Secr = anno_barplot(ifelse(splsda.res$Data =="CM",1,0),
+                                            gp = gpar(fill = ifelse(splsda.res$Data =="CM",7,0)), width = unit(1, "cm")))
+
+
+row_ha <- rowAnnotation(`Loading\nWeigth` = anno_barplot(splsda.res$value.var,
+                                                         gp = gpar(fill = ifelse(abs(splsda.res$value.var) > 0.2, 2,0)), 
+                                                         width = unit(3, "cm")),
+                        `Freq\n(Stability)` = anno_barplot(splsda.res$Freq,
+                                                           gp = gpar(fill = ifelse(splsda.res$Freq > 0.5, 2,0)), 
+                                                           width = unit(1, "cm")),
+                        Secr = ifelse(splsda.res$Data =="CM",3,0))
+
+
+column_ha = HeatmapAnnotation(df =as.data.frame(Annot[,c("Subtype","Culture type")]),
+                              which="col",
+                              col=colorlist,
+                              annotation_name_side = "left")
+
+
+draw(Heatmap(Expr.both.comp[splsda.res$Row.names,],
+             name="sPLS-DA",
+             col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+             cluster_rows = F, top_annotation = column_ha, 
+             cluster_columns = T,
+             left_annotation = row_ha,
+             clustering_distance_columns = "pearson",
+             row_split = factor(splsda.res$Subtype, levels=c(
+               "UP in AvsN", "UP in NvsA", "UP in P", "DOWN in P", "UP in Y", "DOWN in Y"
+             )),
+             show_row_dend = T,
+             show_row_names = T,
+             row_labels = splsda.res$Name,
+             column_gap = unit(0.1, "cm"),
+             row_names_gp = gpar(fontsize = 9),
+             column_names_gp =  gpar(fontsize = 9),
+             gap = unit(0.1, "cm"),
+             heatmap_width = unit(15, "cm"),  #20
+             show_heatmap_legend = T,
+             show_column_names = T),
+     annotation_legend_side="bottom",
+     heatmap_legend_side="left")
+
+
+```
+
+
+```{r }
+pdf(file="Figures/sPLSDA_all_proteins.pdf",width = 10, height = 20)
+draw(Heatmap(Expr.both.comp[splsda.res$Row.names,],
+             name="sPLS-DA",
+             col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+             cluster_rows = F, top_annotation = column_ha, 
+             cluster_columns = T,
+             left_annotation = row_ha,
+             clustering_distance_columns = "pearson",
+             row_split = factor(splsda.res$Subtype, levels=c(
+               "UP in AvsN", "UP in NvsA", "UP in P", "DOWN in P", "UP in Y", "DOWN in Y"
+             )),
+             show_row_dend = T,
+             show_row_names = T,
+             row_labels = splsda.res$Name,
+             column_gap = unit(0.1, "cm"),
+             row_names_gp = gpar(fontsize = 9),
+             column_names_gp =  gpar(fontsize = 9),
+             gap = unit(0.1, "cm"),
+             heatmap_width = unit(15, "cm"),  #20
+             show_heatmap_legend = T,
+             show_column_names = T),
+     annotation_legend_side="bottom",
+     heatmap_legend_side="left")
+dev.off()
+
+```
+
+```{r }
+nrow(splsda.res[splsda.res$Subtype=="UP in Y",])
+nrow(splsda.res[splsda.res$Subtype=="DOWN in Y",])
+
+```
+
+
+```{r }
+support.gene <- c("CNN2","EPHA2","AQR","MAP2K6","IL18","DNAJC7",
+                  "LGALS1","SEL1L","TFIP11","AHNAK","ACSL3","GPX8",
+                  "TPM2","BTAF1","SHANK2","CAVIN1","CSF1","MYADM",
+                  "PKD2","PRRC2C","CALU","AP2M1","ZNF638","LRRFIP2",
+                  "SLTM","HOOK3","SORBS3","ERLIN1","MOSPD2","FBXO6",
+                  "PLS3","LIMS1","MPV17","RHOC","TGFB1","SLC12A2",
+                  "SERPINH1","IKBIP","EXOSC1","IFITM3")
+support.CCLE <- c(1,2,0,0,0,0,
+                  2,0,0,1,0,2,
+                  2,0,0,2,"NA",1,
+                  "NA",0,1,0,0,1,
+                  1,0,1,2,0,1,
+                  0,2,1,2,2,0,
+                  2,2,1,1)
+support.George <- c(0,0,0,0,0,0,
+                  0,0,0,0,0,1,
+                  0,0,0,"NA",0,0,
+                  0,0,0,0,0,0,
+                  0,0,1,0,0,0,
+                  1,2,0,2,0,0,
+                  1,1,0,0)
+
+
+Trans.Support <- data.frame(Gene = support.gene,
+                            CCLE = as.character(support.CCLE),
+                            George = as.character(support.George))
+
+Trans.Support$CCLE <-ifelse(Trans.Support$CCLE=="NA", "No data",Trans.Support$CCLE)
+Trans.Support$CCLE <-ifelse(Trans.Support$CCLE=="0", "No support",Trans.Support$CCLE)
+Trans.Support$CCLE <- ifelse(Trans.Support$CCLE=="1", "Partially supported",Trans.Support$CCLE)
+Trans.Support$CCLE <- ifelse(Trans.Support$CCLE=="2", "Fully supported",Trans.Support$CCLE)
+
+
+Trans.Support$George <- ifelse(Trans.Support$George=="NA", "No data",Trans.Support$George)
+Trans.Support$George <- ifelse(Trans.Support$George=="0", "No support",Trans.Support$George)
+Trans.Support$George <- ifelse(Trans.Support$George=="1", "Partially supported",Trans.Support$George)
+Trans.Support$George <- ifelse(Trans.Support$George=="2", "Fully supported",Trans.Support$George)
+
+```
+
+
+```{r , fig.width=12, fig.height=7}
+
+
+scaled.tab <- t(Expr.both.comp[splsda.res[splsda.res$Subtype =="UP in Y","Row.names"],])
+row.names(splsda.res) <- splsda.res$Row.names
+
+splsda.res.renamed <- splsda.res[,c("Row.names", "value.var", "Freq", "Subtype", "Data", "Gene")]
+colnames(splsda.res.renamed) <- c("Accession","Loading.Weight", "Frequency", "Subtype", "Data", "Gene")
+
+splsda.res.renamed.Y <- splsda.res.renamed[splsda.res.renamed$Subtype =="UP in Y",]
+
+splsda.res.renamed.Y <- merge(splsda.res.renamed.Y, Trans.Support, by="Gene")
+row.names(splsda.res.renamed.Y) <- splsda.res.renamed.Y$Accession
+splsda.res.renamed.Y <- splsda.res.renamed.Y[colnames(scaled.tab),]
+
+splsda.res.renamed.Y$Discriminating.ability <- splsda.res.renamed.Y$Loading.Weight * splsda.res.renamed.Y$Frequency
+splsda.res.renamed.Y$Secreted <- ifelse(splsda.res.renamed.Y$Data=="CM", "Yes", "No")
+splsda.res.renamed.Y$CCLE <- splsda.res.renamed.Y$CCLE
+splsda.res.renamed.Y$George <- splsda.res.renamed.Y$George
+
+column_ha_row = HeatmapAnnotation(df =as.data.frame(splsda.res.renamed.Y[,c( "George", "CCLE")]),
+                              which="col",
+                              col=list(
+                                "CCLE"=
+                                  c("No data" = "grey",
+                                    "No support" = "white",
+                                    "Partially supported" = "#FFD480",
+                                    "Fully supported" = "darkgreen"),
+                                "George"=
+                                  c("No data" = "grey",
+                                    "No support" = "white",
+                                    "Partially supported" = "#FFD480",
+                                    "Fully supported" = "darkgreen")),
+                              annotation_name_side = "right",
+                              gp = gpar(col = "darkgrey"))
+
+row_ha <- rowAnnotation(`Subtype` = Annot[row.names(scaled.tab),"Subtype"],
+                        col = list(`Subtype` = 
+                                     c("SCLC-A"="#0000FE",
+                                       "SCLC-Y"="#FB02FE",
+                                       "SCLC-N"="#21FE06",
+                                       "SCLC-P"="#FEFE0A")))
+
+
+Heatmap(scaled.tab, top_annotation = column_ha_row, left_annotation = row_ha,
+        cluster_row_slices = F, cluster_columns = F, name="Z-score",
+        show_row_names = F,
+        show_row_dend = F, 
+        column_labels = splsda.res.renamed.Y$Gene,
+        show_column_names = T, col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+        column_names_gp = gpar(fontsize = 14),
+        row_names_gp = gpar(fontsize = 10))
+
+```
+
+
+```{r }
+pdf(file="Figures/SCLCY_markers.pdf",width = 12, height = 7)
+Heatmap(scaled.tab, top_annotation = column_ha_row, left_annotation = row_ha,
+        cluster_row_slices = F, cluster_columns = F, name="Z-score",
+        show_row_names = F,
+        show_row_dend = F, 
+        column_labels = splsda.res.renamed.Y$Gene,
+        show_column_names = T, col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+        column_names_gp = gpar(fontsize = 14),
+        row_names_gp = gpar(fontsize = 10))
+dev.off()
+
+
+
+
+```
+
+
+

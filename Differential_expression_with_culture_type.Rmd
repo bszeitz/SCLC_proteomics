@@ -1,0 +1,314 @@
+---
+title: "Differential expression analysis with culture type"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+
+
+# Load packages, functions and files
+
+
+```{r }
+source("Install_load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+
+```{r }
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+CP.expr.imp <- read_in_with_rowname("Files/CP_expression_filtered_imputed",F)[,Annot$Sample]
+CM.expr.imp <- read_in_with_rowname("Files/CM_expression_filtered_imputed",F)[,Annot$Sample]
+CP.expr <- read_in_with_rowname("Files/CP_expression_full",F)[,Annot$Sample]
+CM.expr <- read_in_with_rowname("Files/CM_expression_full",F)[,Annot$Sample]
+Secreted.proteins <- read_in_with_rowname("Files/Tier1_and_2_secreted",F)[,1]
+secreted.proteins.CM <- Secreted.proteins[Secreted.proteins %in% row.names(CM.expr.imp)]
+secreted.proteins.CP <- Secreted.proteins[Secreted.proteins %in% row.names(CP.expr.imp)]
+Protein.to.gene <- read_in_with_rowname("Files/Protein_to_Gene",F)
+
+```
+
+
+```{r Create shorter names for culture types}
+Annot$Culture <- Annot$`Culture type`
+Annot$Culture <- ifelse(Annot$`Culture type` =="Adherent","Adh",Annot$Culture)
+Annot$Culture <- ifelse(Annot$`Culture type` =="Suspension","Susp",Annot$Culture)
+Annot$Culture <- ifelse(Annot$`Culture type` =="Semi-adherent",NA,Annot$Culture)
+Annot <- na.omit(Annot)
+CP.expr.imp <- CP.expr.imp[,row.names(Annot)]
+CM.expr.imp <- CM.expr.imp[,row.names(Annot)]
+
+```
+
+
+
+```{r Load file that contains Entrez IDs for UniProt accession numbers}
+UniProt.to.Entrez <- read.delim("Files/UniProt_to_Entrez.txt")
+```
+
+
+# Differential expression analysis
+
+
+```{r ,eval=F}
+CP.Culture.ANOVA <- ANOVAandTK_padj_rank(annotation = Annot, colname_for_factor = "Culture",
+                                        levelOrder = c("Adh", "Susp"), m = CP.expr.imp)
+CM.Culture.ANOVA <- ANOVAandTK_padj_rank(annotation = Annot, colname_for_factor = "Culture",
+                                        levelOrder = c("Adh", "Susp"), m = CM.expr.imp)
+save(CP.Culture.ANOVA, CM.Culture.ANOVA, file="Files/CP_and_CM_DEA_CultureType.RData")
+export_with_rowname(CP.Culture.ANOVA, "Files/CP_DEA_CultureType", F)
+export_with_rowname(CM.Culture.ANOVA, "Files/CM_DEA_CultureType", F)
+```
+
+
+```{r }
+load("RData/CP_and_CM_DEA_CultureType.RData")
+
+#only secreted proteins
+CM.Culture.ANOVA.SPs <- CM.Culture.ANOVA[secreted.proteins.CM,]
+
+```
+
+
+# Overrepresentation analysis and export
+
+
+```{r }
+
+DE.Susp.vs.Adh <- c(row.names(subset(CP.Culture.ANOVA, CP.Culture.ANOVA$`p.adj Culture` < 0.05 & 
+                                       CP.Culture.ANOVA$`tukey(Susp-Adh)` < 0.05)),
+                    row.names(subset(CM.Culture.ANOVA.SPs, CM.Culture.ANOVA.SPs$`p.adj Culture` < 0.05 & 
+                                       CM.Culture.ANOVA.SPs$`tukey(Susp-Adh)` < 0.05)))
+
+
+DE.Susp.vs.Adh.Entrez <- na.omit(UniProt.to.Entrez[UniProt.to.Entrez$UniProt %in%DE.Susp.vs.Adh,])
+DE.Susp.vs.Adh.Entrez <- DE.Susp.vs.Adh.Entrez[!duplicated(DE.Susp.vs.Adh.Entrez$UniProt),"Entrez"]
+
+run=F
+if (run){
+  ORA.Susp.vs.Adh <- list(GOBP = enrichGO(DE.Susp.vs.Adh,
+                                          ont="BP", 
+                                          OrgDb = org.Hs.eg.db, keyType ="UNIPROT", 
+                                          pvalueCutoff = 1, qvalueCutoff = 1),
+                          GOCC = enrichGO(DE.Susp.vs.Adh,
+                                          ont="CC", 
+                                          OrgDb = org.Hs.eg.db, keyType ="UNIPROT", 
+                                          pvalueCutoff = 1, qvalueCutoff = 1),
+                          GOMF = enrichGO(DE.Susp.vs.Adh,
+                                          ont="MF", 
+                                          OrgDb = org.Hs.eg.db, keyType ="UNIPROT", 
+                                          pvalueCutoff = 1, qvalueCutoff = 1),
+                          KEGG = enrichKEGG(gene = DE.Susp.vs.Adh,
+                                            organism     = 'hsa',
+                                            keyType ="uniprot",
+                                            pvalueCutoff = 1,
+                                            qvalueCutoff = 1),
+                          Reactome = enrichPathway(gene = DE.Susp.vs.Adh.Entrez,
+                                                   organism     = 'human',
+                                                   pvalueCutoff = 1,
+                                                   qvalueCutoff = 1))
+  save(ORA.Susp.vs.Adh, file="RData/ORA_forcultureComparisons_CPCM_MERGED.RData")
+}
+
+
+load("RData/ORA_forcultureComparisons_CPCM_MERGED.RData")
+DE.Susp.vs.Adh.table <- rbind(subset(CP.Culture.ANOVA, CP.Culture.ANOVA$`p.adj Culture` < 0.05 & 
+                                   CP.Culture.ANOVA$`tukey(Susp-Adh)` < 0.05),
+                          subset(CM.Culture.ANOVA.SPs, CM.Culture.ANOVA.SPs$`p.adj Culture` < 0.05 & 
+                                   CM.Culture.ANOVA.SPs$`tukey(Susp-Adh)` < 0.05))
+DE.Susp.vs.Adh.table$Data <- c(rep("CP", nrow(subset(CP.Culture.ANOVA, CP.Culture.ANOVA$`p.adj Culture` < 0.05 & 
+                                   CP.Culture.ANOVA$`tukey(Susp-Adh)` < 0.05))), 
+                               rep("CM", nrow(subset(CM.Culture.ANOVA.SPs, CM.Culture.ANOVA.SPs$`p.adj Culture` < 0.05 & 
+                                   CM.Culture.ANOVA.SPs$`tukey(Susp-Adh)` < 0.05)))) 
+
+DE.Susp.vs.Adh.table <- DE.Susp.vs.Adh.table[,c("Accession", "Data", "p.v Culture", "p.adj Culture", "Log2FC(Susp-Adh)", "Log2FC.95%.CI(Susp-Adh)")]
+
+export =T
+if (export){
+  wb <- createWorkbook(
+    title = NULL,
+  )
+  sheetnames <- c("proteins","ORA_results")
+  sheets <- vector(mode = "list", length=length(sheetnames))
+  resulttables <- list(DE = DE.Susp.vs.Adh.table,
+                       KEGG = ORA.Susp.vs.Adh[["KEGG"]], 
+                       GOBP = ORA.Susp.vs.Adh[["GOBP"]], 
+                       GOCC = ORA.Susp.vs.Adh[["GOCC"]],
+                       GOMF = ORA.Susp.vs.Adh[["GOMF"]], 
+                       Reactome = ORA.Susp.vs.Adh[["Reactome"]])
+  
+  sheets[[1]] <- resulttables[[1]]
+  
+  for (i in 2:length(resulttables)){
+    sheet.sub <- resulttables[[i]]@result
+    sheet.sub <- subset(sheet.sub, sheet.sub$pvalue < 0.05)
+    sheet.sub$Database <- names(resulttables)[i]
+    if (i ==2){
+      sheets[[2]] <- sheet.sub
+    } else {
+      sheets[[2]] <- rbind(sheets[[2]],sheet.sub)
+    }
+  }
+  
+  for (j in 1:nrow(sheets[[2]])){
+    accessions <- unlist(lapply(sheets[[2]]$geneID[j], function(x){strsplit(x, split="/", fixed=T)}))
+    if (accessions[1] %in% UniProt.to.Entrez$Entrez){
+      new.names <-unlist(lapply(accessions, function(x){ 
+        na.omit(UniProt.to.Entrez[UniProt.to.Entrez$Entrez==x,"UniProt"])[1] }))
+    } else {
+      new.names <- accessions
+    }
+    DE.Susp.vs.Adh.table.sub <- DE.Susp.vs.Adh.table[DE.Susp.vs.Adh.table$Accession %in% new.names,]
+    dupl.SP <- DE.Susp.vs.Adh.table.sub[duplicated(DE.Susp.vs.Adh.table.sub$Accession),"Accession"]
+    directions <- new.names
+    for (N in 1:length(new.names)){
+      if (!new.names[N] %in% DE.Susp.vs.Adh.table.sub$Accession){ 
+        directions[N] <- "ERROR"
+        next
+      }
+      if (new.names[N] %in% dupl.SP){
+        dir1 <- ifelse(DE.Susp.vs.Adh.table.sub[DE.Susp.vs.Adh.table.sub$Accession ==new.names[N] & 
+                                                  DE.Susp.vs.Adh.table.sub$Data =="CP","Log2FC(Susp-Adh)"] > 0, "UP","DOWN")
+        dir2 <- ifelse(DE.Susp.vs.Adh.table.sub[DE.Susp.vs.Adh.table.sub$Accession ==new.names[N] & 
+                                                  DE.Susp.vs.Adh.table.sub$Data =="CM","Log2FC(Susp-Adh)"] > 0, "UP","DOWN")
+        
+        directions[N] <- paste0("cp",dir1, ", cm",dir2)
+      } else {
+        directions[N] <- ifelse(DE.Susp.vs.Adh.table.sub[DE.Susp.vs.Adh.table.sub$Accession ==new.names[N],"Log2FC(Susp-Adh)"] > 0, "UP","DOWN")
+      }
+    }
+    
+    gene.names <- paste(unlist(lapply(new.names, function(x){ 
+      Protein.to.gene[Protein.to.gene$Protein ==x,"Gene"] })),collapse="/")
+    sheets[[2]]$GeneNames[j] <- gene.names
+    sheets[[2]]$Direction[j] <-  paste(directions,collapse="/")
+  }
+  
+  sheets[[2]] <- sheets[[2]][,c("Database", "ID", "Description", "GeneRatio", "BgRatio", "pvalue", "p.adjust", "qvalue", "geneID", "GeneNames", "Direction", "Count")]
+  
+  
+  for (i in 1:length(sheets)) {
+    addWorksheet(wb, sheetnames[i])
+    writeData(
+      wb = wb,
+      sheet = sheetnames[i],
+      x = sheets[[i]])
+  }
+  saveWorkbook(wb, paste0("Files/Supplementary_Culture_ORA.xlsx"), overwrite = TRUE)
+}
+
+
+
+
+```
+
+# Volcano plot
+
+```{r }
+highlighted.pathways <- c("Protein processing in endoplasmic reticulum", "ECM-receptor interaction", 
+              "collagen binding", "laminin binding", "extracellular matrix binding")
+DB <- c("KEGG", "KEGG", "GOMF", "GOMF","GOMF")
+
+all.proteins <- vector()
+
+for (i in 1:length(highlighted.pathways)){
+  all.proteins <- unique(c(all.proteins, 
+                           strsplit(ORA.Susp.vs.Adh[[DB[i]]]@result[ORA.Susp.vs.Adh[[DB[i]]]@result$Description == highlighted.pathways[i], 
+                                                                                  "geneID"], 
+                                                  split="/", fixed=T)[[1]]))
+}
+
+```
+
+
+```{r Create table for the figure}
+
+CM.Culture.ANOVA.SPs.sign <- CM.Culture.ANOVA.SPs[CM.Culture.ANOVA.SPs$`p.adj Culture` < 0.05,]
+
+CP.de <- CP.Culture.ANOVA[!row.names(CP.Culture.ANOVA)%in%CM.Culture.ANOVA.SPs.sign$Accession,c("Log2FC(Susp-Adh)", "tukey(Susp-Adh)", "p.adj Culture")]
+colnames(CP.de) <-c("log2FoldChange", "p.value", "global.p.value") 
+CP.de$Accession <- row.names(CP.Culture.ANOVA[!row.names(CP.Culture.ANOVA)%in%CM.Culture.ANOVA.SPs.sign$Accession,])
+CP.de$Data <- "CP"
+
+CM.de <-CM.Culture.ANOVA.SPs[,c("Log2FC(Susp-Adh)", "tukey(Susp-Adh)", "p.adj Culture")]
+colnames(CM.de) <-c("log2FoldChange", "p.value", "global.p.value") 
+CM.de$Accession <- row.names(CM.Culture.ANOVA.SPs)
+CM.de$Data <- "CM"
+
+de <- rbind(CP.de, CM.de)
+de$diffexpressed <- ifelse(de$p.value < 0.05 & de$global.p.value < 0.05, "yes", "no")
+de$delabel <- ifelse(de$diffexpressed =="yes", de$Accession, "")
+for (i in 1:nrow(de)){
+  if (de$delabel[i] %in% all.proteins){
+    de$Category[i] <- "Highlighted"
+  } else {
+    de$Category[i] <- "Not Highlighted"
+  }
+}
+de$Category <- ifelse(de$diffexpressed !="yes", "Not Significant", de$Category)
+
+de$delabel <- ifelse(de$Category =="Highlighted", de$Accession, "")
+de$Category <- ifelse(de$Category == "Highlighted" & de$log2FoldChange < 0, "Highlighted - DOWN in suspension", de$Category)
+de$Category <- ifelse(de$Category == "Highlighted" & de$log2FoldChange > 0, "Highlighted - UP in suspension", de$Category)
+
+de$Category <- ifelse(de$Category != "Highlighted - UP in suspension" & de$Category != "Highlighted - DOWN in suspension" & 
+                        de$log2FoldChange > 0 & de$diffexpressed =="yes", 
+                      "Not Highlighted - UP in suspension", de$Category)
+de$Category <- ifelse(de$Category != "Highlighted - UP in suspension" & de$Category != "Highlighted - DOWN in suspension" &
+                        de$log2FoldChange < 0 & de$diffexpressed =="yes", 
+                      "Not Highlighted - DOWN in suspension", de$Category)
+
+de$Color <- paste(de$Category, de$Data, sep="_")
+
+de$Category <- factor(de$Category, levels = c("Not Significant", 
+                                              "Not Highlighted - DOWN in suspension", 
+                                              "Not Highlighted - UP in suspension",
+                                              "Highlighted - DOWN in suspension", 
+                                              "Highlighted - UP in suspension"))
+
+de$Color <- ifelse(grepl("DOWN in suspension_CP",de$Color), "DOWN in suspension_CP",de$Color)
+de$Color <- ifelse(grepl("UP in suspension_CP",de$Color), "UP in suspension_CP",de$Color)
+de$Color <- ifelse(grepl("DOWN in suspension_CM",de$Color), "DOWN in suspension_CM",de$Color)
+de$Color <- ifelse(grepl("UP in suspension_CM",de$Color), "UP in suspension_CM",de$Color)
+
+de$Color <- factor(de$Color, levels = c("Not Significant_CP","Not Significant_CM", 
+                                              "DOWN in suspension_CP","DOWN in suspension_CM", 
+                                              "UP in suspension_CP", "UP in suspension_CM"))
+
+
+for (i in 1:nrow(de)){
+  if(de$delabel[i] !=""){
+    de$delabel[i] <- Protein.to.gene[Protein.to.gene$Protein ==de$delabel[i],"Gene"]
+  }
+}
+```
+
+
+
+```{r , fig.width=12, fig.height=12}
+
+ggplot(data=de, aes(x=log2FoldChange, y=-log10(global.p.value), col=Color, label=delabel)) + 
+    geom_point() + 
+    theme_classic()+
+  geom_label_repel(max.overlaps = 1000, seed=1234, aes(label = delabel)) + #ggtitle(title)+ 
+  scale_color_manual(values=c("darkgrey","lightblue", "#089000","blue","#800080", "#ff0081"))+
+  xlab("log2FC(suspension vs adherent cell lines)")+ylab("-log10(p-value)")+ ylim(0.0001,3.15)+ xlim(-5.2,5.2)+
+  theme(legend.position="bottom",
+        legend.title = element_text(size=16),legend.text = element_text(size=16),
+        axis.text.x = element_text(size=18),
+        axis.text.y = element_text(size=18),
+        axis.title=element_text(size=18,face="bold"))
+
+```
+
+
+
+```{r }
+save(Protein.to.gene, ORA.Susp.vs.Adh, CP.Culture.ANOVA, CM.Culture.ANOVA.SPs, file= "RData/Fig_DEA_culture.RData")
+```
+
+

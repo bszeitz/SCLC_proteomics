@@ -1,0 +1,525 @@
+---
+title: "Neuroendocrine and epithelial-mesenchymal transition scores"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+
+# Load packages, functions and files
+
+
+```{r }
+source("Install_load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+```{r }
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+CP.expr.imp <- read_in_with_rowname("Files/CP_expression_filtered_imputed",F)[,Annot$Sample]
+Protein.to.gene <- read_in_with_rowname("Files/Protein_to_Gene",F)
+```
+
+
+```{r DLL3, fig.width=4, fig.height=2}
+
+DLL3 <- as.data.frame(t(scale(t(CP.expr.imp))))
+DLL3$Accession <- row.names(DLL3)
+DLL3 <- reshape2::melt(DLL3)
+DLL3 <- DLL3[DLL3$Accession == "Q9NYJ7",]
+colnames(DLL3)[2] <- "Sample"
+DLL3 <- merge(DLL3, Annot[,c("Sample", "Subtype")], by="Sample")
+
+
+ggplot(DLL3, aes(x=Subtype, y=value, fill=Subtype))+ theme_classic()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_boxplot() + ylab("Z-score")+xlab("")+ggtitle("DLL3 (Q9NYJ7)")
+
+```
+
+```{r }
+save(DLL3, file= "RData/DLL3_boxplot.RData")
+```
+
+
+
+# NE and non-NE markers (Zhang2018)
+
+
+```{r }
+
+Zhang2018 <- as.data.frame(read_xlsx("Files/NE_and_non-NE_genes_Zhang2018.xlsx",sheet=1))
+row.names(Zhang2018) <- Zhang2018$Gene
+
+Zhang2018.CP <- row.names(CP.expr.imp)[row.names(CP.expr.imp) %in% Zhang2018$Protein]
+
+NE.expression <- t(scale(t(CP.expr.imp[Zhang2018.CP,])))
+
+for (i in 1:nrow(NE.expression)){
+  row.names(NE.expression)[i] <- Zhang2018[Zhang2018$Protein==row.names(NE.expression)[i],"Gene"]
+}
+
+```
+
+
+```{r }
+column.ha <- create_heatmapannot(Annot, c("Subtype", "Culture type","Cell line origin","Chemo"), colorlist)
+
+```
+
+
+```{r , fig.width=15, fig.height=8}
+draw(Heatmap(NE.expression, column_title ="CP - Zhang NE and non-NE proteins",
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = T, top_annotation = column.ha, 
+             #column_split = 4, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             row_split = Zhang2018[row.names(NE.expression),"Type"],
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+draw(Heatmap(NE.expression, column_title ="CP - Zhang NE and non-NE proteins",
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = T, top_annotation = column.ha, 
+             column_split = Annot$Subtype, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = F, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             row_split = Zhang2018[row.names(NE.expression),"Type"],
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+```
+
+```{r }
+column.ha.NE <- column.ha
+save(NE.expression, column.ha.NE, Zhang2018, file= "RData/NE_markers_heatmap.RData")
+
+```
+
+
+
+```{r }
+subtypes <- c("SCLC-A","SCLC-N","SCLC-P","SCLC-Y")
+
+Avr.NE.values <- NE.expression[1:2,]
+row.names(Avr.NE.values) <- c("NE","non-NE")
+NE.markers <- Zhang2018[Zhang2018$Type=="NE","Gene"] 
+nonNE.markers <- Zhang2018[Zhang2018$Type!="NE","Gene"] 
+Avr.NE.values[1,] <- apply(NE.expression[row.names(NE.expression) %in% NE.markers,], 2, mean, na.rm=T)
+Avr.NE.values[2,] <- apply(NE.expression[row.names(NE.expression) %in% nonNE.markers,], 2, mean, na.rm=T)
+
+Avr.NE.values.sign <- Avr.NE.values
+Avr.NE.values.sign[2,] <- Avr.NE.values.sign[2,] * -1
+
+NEscores <- as.numeric(apply(Avr.NE.values.sign[1:2,], 2, sum))
+names(NEscores) <- colnames(Avr.NE.values.sign)
+```
+
+
+```{r }
+
+
+for (i in 1:length(subtypes)){
+  print(subtypes[i])
+  samples <- Annot[Annot$Subtype == subtypes[i],"Sample"]
+  print(mean(NEscores[names(NEscores) %in% samples]))
+  print(sd(NEscores[names(NEscores) %in% samples]))
+}
+
+
+
+```
+
+
+```{r }
+NEscores <- data.frame(Sample = names(NEscores),
+                       Avr.Zscore = NEscores,
+                       Subtype = Annot[names(NEscores),"Subtype"])
+NEscores$SD <- NA
+NEscores$Mean <- NA
+
+row.names(NEscores) <- NEscores$Sample
+
+for (i in 1:length(subtypes)){
+  calc.SD <- sd(NEscores[NEscores$Subtype ==subtypes[i],"Avr.Zscore"])
+  calc.mean <- mean(NEscores[NEscores$Subtype ==subtypes[i],"Avr.Zscore"])
+  NEscores$SD <- ifelse(NEscores$Subtype ==subtypes[i], calc.SD, NEscores$SD)
+  NEscores$Mean <- ifelse(NEscores$Subtype ==subtypes[i], calc.mean, NEscores$Mean)
+}
+
+Annot$NEscore <- NEscores[Annot$Sample,"Avr.Zscore"]
+
+
+
+ggplot(NEscores, aes(x=Subtype, y=Mean, fill=Subtype)) + 
+    geom_bar(position=position_dodge(), stat="identity") +
+    geom_errorbar(aes(ymin=Mean-SD, ymax=Mean+SD),
+                  width=.2,                    # Width of the error bars
+                  position=position_dodge(.9))
+
+```
+
+
+```{r }
+column.ha = HeatmapAnnotation(df =Annot[,c("Subtype", "Culture type","Cell line origin","Chemo")],
+                              which="col",
+                              col=colorlist,
+                              annotation_name_side = "right",
+                              gp = gpar(col = "grey"),
+                              "NE.score" = anno_barplot(Annot$NEscore,
+                                                        gp = gpar(fill =  c("#76069a")),
+                                                        height = unit(1.5, "cm"),
+                                                        axis_param = list(
+                                                          side = "left",
+                                                          at = c(-2.25,0,1.5), 
+                                                          labels = c("-2.25","0", "+1.5") )),
+                              gap = unit(c(1,1,1,1.5), 'mm'),
+                              show_legend = TRUE,
+                              show_annotation_name = TRUE)
+```
+
+
+
+```{r , fig.width=15, fig.height=4}
+
+Avr.NE.values <- Avr.NE.values[,row.names(Annot)]
+
+all(colnames(Avr.NE.values) == Annot$Sample)
+draw(Heatmap(Avr.NE.values,
+                     name="Avr. Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = column.ha, 
+             column_split = Annot$Subtype, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             cluster_column_slices = F,
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+
+draw(Heatmap(Avr.NE.values, 
+                     name="Avr. Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = column.ha, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+```
+
+```{r }
+column.ha.NEscore <- column.ha
+Annot.NEscore <- Annot
+save(column.ha.NEscore, Avr.NE.values, Annot.NEscore, file="RData/NE_scores_heatmap.RData")
+
+```
+
+
+# Epithelial and mesenchymal markers (Kohn2014)
+
+```{r }
+Kohn2014 <- as.data.frame(read_xlsx("Files/EMT_genes_Kohn2014.xlsx",sheet=1))
+row.names(Kohn2014) <- Kohn2014$Gene
+Kohn2014 <- Kohn2014[Kohn2014$Gene != "LIX1L",] #because it was not used by https://www.cell.com/cms/10.1016/j.isci.2018.11.029/attachment/70683b02-8093-4c56-a41a-5439f88a64ca/mmc1
+
+Kohn2014.CP <-row.names(CP.expr.imp)[row.names(CP.expr.imp) %in% Kohn2014$Protein] 
+
+EMT.expression <- t(scale(t(CP.expr.imp[Kohn2014.CP,])))
+
+for (i in 1:nrow(EMT.expression)){
+  row.names(EMT.expression)[i] <- Kohn2014[Kohn2014$Protein==row.names(EMT.expression)[i],"Gene"]
+}
+```
+
+
+```{r }
+column.ha <- create_heatmapannot(Annot, c("Subtype", "Culture type","Cell line origin","Chemo"), colorlist)
+
+```
+
+```{r , fig.width=15, fig.height=6}
+draw(Heatmap(EMT.expression, column_title ="CP - Kohn epithelial and mesenchymal proteins",
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = T, top_annotation = column.ha, 
+             #column_split = 4, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             row_split = Kohn2014[row.names(EMT.expression),"Type"],
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+draw(Heatmap(EMT.expression, column_title ="CP - Kohn epithelial and mesenchymal proteins",
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = T, top_annotation = column.ha, 
+             column_split = Annot$Subtype, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = F, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             row_split = Kohn2014[row.names(EMT.expression),"Type"],
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+```
+
+```{r }
+column.ha.EMT <- column.ha
+save(EMT.expression, column.ha.EMT, Kohn2014, file= "RData/EMT_markers_heatmap.RData")
+
+```
+
+
+```{r }
+Avr.EMT.values <- EMT.expression[1:2,]
+row.names(Avr.EMT.values) <- c("Epithelial","Mesenchymal")
+epi.markers <- Kohn2014[Kohn2014$Type=="EPITH","Gene"] 
+mes.markers <- Kohn2014[Kohn2014$Type!="EPITH","Gene"] 
+Avr.EMT.values[1,] <- apply(EMT.expression[row.names(EMT.expression) %in% epi.markers,], 2, mean, na.rm=T)
+Avr.EMT.values[2,] <- apply(EMT.expression[row.names(EMT.expression) %in% mes.markers,], 2, mean, na.rm=T)
+
+Avr.EMT.values.sign <- Avr.EMT.values
+Avr.EMT.values.sign[1,] <- Avr.EMT.values.sign[1,] * -1
+
+EMTscores <- as.numeric(apply(Avr.EMT.values.sign[1:2,], 2, sum))
+names(EMTscores) <- colnames(Avr.EMT.values.sign)
+```
+
+
+```{r }
+for (i in 1:length(subtypes)){
+  print(subtypes[i])
+  samples <- Annot[Annot$Subtype == subtypes[i],"Sample"]
+  print(mean(EMTscores[names(EMTscores) %in% samples]))
+  print(sd(EMTscores[names(EMTscores) %in% samples]))
+}
+```
+
+```{r }
+EMTscores <- data.frame(Sample = names(EMTscores),
+                       Avr.Zscore = EMTscores,
+                       Subtype = Annot[names(EMTscores),"Subtype"])
+EMTscores$SD <- NA
+EMTscores$Mean <- NA
+
+row.names(EMTscores) <- EMTscores$Sample
+
+for (i in 1:length(subtypes)){
+  calc.SD <- sd(EMTscores[EMTscores$Subtype ==subtypes[i],"Avr.Zscore"])
+  calc.mean <- mean(EMTscores[EMTscores$Subtype ==subtypes[i],"Avr.Zscore"])
+  EMTscores$SD <- ifelse(EMTscores$Subtype ==subtypes[i], calc.SD, EMTscores$SD)
+  EMTscores$Mean <- ifelse(EMTscores$Subtype ==subtypes[i], calc.mean, EMTscores$Mean)
+}
+
+
+ggplot(EMTscores, aes(x=Subtype, y=Mean, fill=Subtype)) + 
+    geom_bar(position=position_dodge(), stat="identity") +
+    geom_errorbar(aes(ymin=Mean-SD, ymax=Mean+SD),
+                  width=.2,                    # Width of the error bars
+                  position=position_dodge(.9))
+
+```
+
+
+```{r }
+Annot$EMTscore <- EMTscores[Annot$Sample,"Avr.Zscore"]
+
+```
+
+
+```{r }
+column.ha = HeatmapAnnotation(df =Annot[,c("Subtype", "Culture type","Cell line origin","Chemo")],
+                              which="col",
+                              col=colorlist,
+                              annotation_name_side = "right",
+                              gp = gpar(col = "grey"),
+                              "EMT.score" = anno_barplot(Annot$EMTscore,
+                                                            gp = gpar(fill =  c("#005757")),
+                                                            height = unit(1.5, "cm"),
+                                                            axis_param = list(
+                                                              side = "left",
+                                                              at = c(-1.9,0,1.6), 
+                                                              labels = c("-1.9","0", "+1.6") )),
+                              gap = unit(c(1,1,1,1.5), 'mm'),
+                              show_legend = TRUE,
+                              show_annotation_name = TRUE)
+```
+
+
+```{r , fig.width=15, fig.height=4}
+
+Avr.EMT.values <- Avr.EMT.values[,row.names(Annot)]
+
+all(colnames(Avr.EMT.values) == Annot$Sample)
+draw(Heatmap(Avr.EMT.values, 
+                     name="Avr. Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = column.ha, 
+             column_split = Annot$Subtype, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             cluster_column_slices = F,
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+
+draw(Heatmap(Avr.EMT.values,
+                     name="Avr. Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = column.ha, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+```
+
+```{r }
+column.ha.EMTscore <- column.ha
+Annot.EMTscore <- Annot
+save(column.ha.EMTscore, Avr.EMT.values, Annot.EMTscore, file="RData/EMT_scores_heatmap.RData")
+
+```
+
+
+# Compare scores to other cell line characteristics
+
+
+```{r , fig.width=5, fig.height=5}
+
+my.comparisons <- list(c("Adherent","Semi-adherent"),
+                       c("Adherent","Suspension"),
+                       c("Semi-adherent","Suspension"))
+
+
+ggplot(Annot, aes(x=`Culture type`, y=NEscore, fill=`Culture type`))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("NE score")+xlab("Culture type")+  scale_fill_manual(values = c("#23b866", "#ef5675", "#7a5195"))+ 
+  stat_compare_means(comparisons = my.comparisons, method = "t.test") +ylim(-2.5,3)+ theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+
+ggplot(Annot, aes(x=`Culture type`, y=EMTscore, fill=`Culture type`))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("EMT score")+xlab("Culture type")+  scale_fill_manual(values = c("#23b866", "#ef5675", "#7a5195"))+ 
+  stat_compare_means(comparisons = my.comparisons, method = "t.test") +ylim(-2.5,3)+ theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+
+```
+
+
+
+```{r , fig.width=5, fig.height=5}
+Annot$`Cell line origin` <- factor(Annot$`Cell line origin`, levels=c(
+  "lung", "pleural.effusion","metastatic"
+))
+
+my_comparisons <- list(c("lung","pleural.effusion"),c("lung","metastatic"), c("pleural.effusion", "metastatic"))
+
+
+ggplot(Annot, aes(x=`Cell line origin`, y=NEscore, fill=`Cell line origin`))+ theme_bw()+
+   geom_boxplot() + ylab("NE score")+xlab("Origin")+  scale_fill_manual(values = c("#3f8098", "lightblue", "#ffc3a0"))+
+  stat_compare_means(comparisons = my_comparisons, method = "t.test") +ylim(-2.5,3)+ theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+
+ggplot(Annot, aes(x=`Cell line origin`, y=EMTscore, fill=`Cell line origin`))+ theme_bw()+ 
+   geom_boxplot() + ylab("EMT score")+xlab("Origin")+  scale_fill_manual(values = c("#3f8098", "lightblue", "#ffc3a0"))+
+  stat_compare_means(comparisons = my_comparisons, method = "t.test") +ylim(-2.5,3)+ theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+
+```
+
+
+```{r , fig.width=5, fig.height=5}
+Annot2 <- Annot[Annot$Chemo !="",]
+
+Annot2$Chemo <- factor(Annot2$Chemo, levels=c(
+  "chemo-naive", "post-chemo"
+))
+
+my_comparisons <- list(c("chemo-naive","post-chemo"))
+
+ggplot(Annot2, aes(x=Chemo, y=NEscore, fill=Chemo))+ theme_bw()+
+   geom_boxplot() + ylab("NE score")+xlab("Chemo")+  scale_fill_manual(values = c("white", "brown"))+
+  stat_compare_means(comparisons = my_comparisons, method = "t.test") +ylim(-2.5,3)+ theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ggplot(Annot2, aes(x=Chemo, y=EMTscore, fill=Chemo))+ theme_bw()+
+   geom_boxplot() + ylab("EMT score")+xlab("Chemo")+  scale_fill_manual(values = c("white", "brown"))+ 
+  stat_compare_means(comparisons = my_comparisons, method = "t.test") +ylim(-2.5,3)+ theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+
+```
+
+
+```{r , fig.width=5, fig.height=4}
+cor.test(Annot$NEscore, Annot$EMTscore)
+
+culture.type <- Annot$`Culture type`
+
+Annot$Label <- ifelse(Annot$Subtype=="SCLC-A" & Annot$EMTscore < -1, Annot$Sample, "")
+
+ggplot(Annot, aes(x=NEscore, y=EMTscore, label=Label)) +
+  geom_point(aes(shape=culture.type, color=Subtype), size=3)+scale_shape_manual(values=c(16, 8, 15))+
+  geom_text_repel()+
+  scale_color_manual(values=c("#0000FE","#21FE06","gold","#FB02FE"))+
+  theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  geom_smooth(method=lm)
+
+
+
+```
+
+
+
+```{r }
+export_with_rowname(Annot[,c("Sample", "Subtype", "NEscore", "EMTscore")], "Files/NE_EMT_scores", F)
+```
+
+
+```{r }
+Annot.NE.EMT <- Annot
+save(Annot.NE.EMT, file= "RData/Fig_NE_EMT_correlations.RData")
+
+```
+
+

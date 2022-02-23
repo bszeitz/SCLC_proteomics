@@ -1,0 +1,582 @@
+---
+title: "Pre-ranked GSEA"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+# Load packages, functions and files
+
+```{r }
+source("Install_load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+```{r }
+Trans.DEA <- read_in_with_rowname("Files/DEA_Subtypes_CCLE", F)
+row.names(Trans.DEA) <- Trans.DEA$Gene
+Prot.DEA <- read_in_with_rowname("Files/CP_DEA_Subtype", F)
+Prot.Info <- read_in_with_rowname("Files/CP_protein_info_filtered_imputed", F)
+Prot.DEA <- Prot.DEA[row.names(Prot.Info),]
+all(row.names(Prot.DEA) == row.names(Prot.Info))
+Prot.DEA$Gene <- Prot.Info$Gene
+Prot.DEA <- Prot.DEA[!is.na(Prot.DEA$Gene),]
+
+```
+
+
+```{r }
+gmtfile <- read.gmt("Files/msigdb.v7.4.symbols.gmt")
+
+gmtfile.sub <- subset(gmtfile, grepl("KEGG_", gmtfile$term) | 
+                        grepl("REACTOME_", gmtfile$term) |
+                        grepl("GOBP_", gmtfile$term) |
+                        grepl("HALLMARK_", gmtfile$term))
+
+gmtfile.onco <- read.gmt("Files/c6.all.v7.4.symbols.gmt")
+gmtfile.sub <- rbind(gmtfile.sub, gmtfile.onco)
+
+```
+
+
+```{r Prepare proteomics}
+duplicated.genes <- unique(Prot.DEA[duplicated(Prot.DEA$Gene),"Gene"]) # 12 genes only
+to.delete <- vector()
+for (i in 1:length(duplicated.genes)){
+  Prot.DEA.sub <- Prot.DEA[Prot.DEA$Gene == duplicated.genes[i],]
+  Prot.DEA.sub <- Prot.DEA.sub[order(Prot.DEA.sub$`p.adj Subtype`),]
+  selected <- row.names(Prot.DEA.sub)[1]
+  to.delete <- c(to.delete, row.names(Prot.DEA.sub)[-1])
+}
+Prot.DEA.nodupl <- Prot.DEA[!row.names(Prot.DEA) %in% to.delete,]
+
+```
+
+
+```{r Lists of ranks}
+comparisons <- c("SCLC-N-SCLC-A", "SCLC-P-SCLC-A", "SCLC-Y-SCLC-A", "SCLC-P-SCLC-N", "SCLC-Y-SCLC-N", "SCLC-Y-SCLC-P")
+
+Prot.ST.list <- list()
+Trans.ST.list <- list()
+for (i in 1:length(comparisons)){
+  Prot.ST.list[[i]] <- Prot.DEA.nodupl[,c("Gene", paste0("Rank(",comparisons[i],")"))]
+  names(Prot.ST.list)[i] <- comparisons[i]
+  Trans.ST.list[[i]] <- Trans.DEA[,c("Gene", paste0("Rank(",comparisons[i],")"))]
+  names(Trans.ST.list)[i] <- comparisons[i]
+}
+
+
+```
+
+# Perform pre-ranked GSEA
+
+
+```{r ,eval=F}
+
+GSEA.results <- vector(length=length(comparisons), mode="list")
+names(GSEA.results) <- comparisons
+GSEA.results.matrix <- as.data.frame(matrix(nrow=0, ncol=12))
+colnames(GSEA.results.matrix) <- c( "Data","ID" ,"Description" ,"setSize" ,"enrichmentScore" ,"NES" ,"pvalue" , "p.adjust", "qvalues" , "rank","leading_edge","core_enrichment")
+
+for (i in 1:length(comparisons)){
+  rank <- Prot.ST.list[[i]]$Rank
+  names(rank) <- Prot.ST.list[[i]]$Gene
+  rank <- na.omit(rank)
+  rank = sort(rank, decreasing = TRUE)
+  Prot.gsea <- GSEA(rank, TERM2GENE=gmtfile.sub, verbose=FALSE, pvalueCutoff = 1.0, eps = 0)
+  Prot.gsea@result$Data <- paste0(comparisons[i], "_Prot")
+  GSEA.results.matrix <- rbind(GSEA.results.matrix, Prot.gsea@result[,colnames(GSEA.results.matrix)])
+  
+  rank <- Trans.ST.list[[i]]$Rank
+  names(rank) <- Trans.ST.list[[i]]$Gene
+  rank <- na.omit(rank)
+  rank = sort(rank, decreasing = TRUE)
+  RNA.gsea <- GSEA(rank, TERM2GENE=gmtfile.sub, verbose=FALSE, pvalueCutoff = 1.0, eps = 0)
+  RNA.gsea@result$Data <- paste0(comparisons[i], "_Trans")
+  GSEA.results.matrix <- rbind(GSEA.results.matrix, RNA.gsea@result[,colnames(GSEA.results.matrix)])
+  
+  GSEA.results[[i]] <- list(Protein = Prot.gsea,
+                            mRNA =RNA.gsea)
+}
+
+
+save(GSEA.results, GSEA.results.matrix, file="RData/pGSEA_results.RData")
+
+```
+
+`
+```{r }
+loaded <-load("RData/pGSEA_results.RData")
+loaded
+```
+
+```{r }
+
+GSEA.results.export <- as.data.frame(matrix(nrow=0, ncol= 23))
+colnames(GSEA.results.export) <- c("ID" ,"Comparison" ,"NES_P","NES_T" , "p.adjust_P" ,"p.adjust_T" , "NES.Rank_P" ,"NES.Rank_T" ,"core_enrichment_P", "core_enrichment_T" ,"core_enrichment_both","pvalue_P" , "pvalue_T" , "setSize_P","setSize_T"  ,"enrichmentScore_P" ,"enrichmentScore_T","qvalues_P","qvalues_T" , "rank_P"  , "rank_T" ,"leading_edge_P" ,"leading_edge_T")
+
+for (i in 1:length(GSEA.results)){
+  GSEA.results.sub <- GSEA.results[[i]]
+  GSEA.results.sub.P <- GSEA.results.sub$Protein@result[,-c(2,12)]
+  GSEA.results.sub.P$NES.Rank <- -log10(GSEA.results.sub.P$p.adjust) * GSEA.results.sub.P$NES
+  colnames(GSEA.results.sub.P)[-1] <- paste(colnames(GSEA.results.sub.P)[-1], "P", sep="_")
+  GSEA.results.sub.T <- GSEA.results.sub$mRNA@result[,-c(2,12)]
+  GSEA.results.sub.T$NES.Rank <- -log10(GSEA.results.sub.T$p.adjust) * GSEA.results.sub.T$NES
+  colnames(GSEA.results.sub.T)[-1] <- paste(colnames(GSEA.results.sub.T)[-1], "T", sep="_")
+  GSEA.results.sub.both <- merge(GSEA.results.sub.P, GSEA.results.sub.T, by="ID", all.x=T, all.y = T)
+  GSEA.results.sub.both$Comparison <- names(GSEA.results)[i]
+  
+  for (j in 1:nrow(GSEA.results.sub.both)){
+    GSEA.results.sub.both$core_enrichment_both[j] <- paste(intersect(unlist(lapply(GSEA.results.sub.both$core_enrichment_P[j], 
+                                                                             function(x){strsplit(x, split="/", fixed = T)[[1]]})),
+                                                               unlist(lapply(GSEA.results.sub.both$core_enrichment_T[j], 
+                                                                             function(x){strsplit(x, split="/", fixed = T)[[1]]}))), 
+                                                                             collapse = "/")
+  }
+  
+  GSEA.results.sub.both <- GSEA.results.sub.both[!is.na(GSEA.results.sub.both$ID),]
+  
+  
+  GSEA.results.sub.both <- GSEA.results.sub.both[,c("ID", "Comparison", "NES_P", "NES_T", "p.adjust_P", "p.adjust_T",
+                                                    "NES.Rank_P", "NES.Rank_T",
+                                                    "core_enrichment_P", "core_enrichment_T","core_enrichment_both",
+                                                    "pvalue_P", "pvalue_T", "setSize_P", "setSize_T", "enrichmentScore_P", "enrichmentScore_T",
+                                                    "qvalues_P", "qvalues_T", "rank_P", "rank_T", "leading_edge_P", "leading_edge_T")]
+  GSEA.results.export <- rbind(GSEA.results.export, GSEA.results.sub.both)
+}
+
+GSEA.results.export$Sign.p_P <- ifelse(GSEA.results.export$pvalue_P < 0.05 & !is.na(GSEA.results.export$pvalue_P), "*","")
+GSEA.results.export$Sign.p_T <- ifelse(GSEA.results.export$pvalue_T < 0.05 & !is.na(GSEA.results.export$pvalue_T), "*","")
+GSEA.results.export$Sign.p_both <- ifelse(GSEA.results.export$Sign.p_P =="*" & GSEA.results.export$Sign.p_T =="*", "*","")
+
+
+GSEA.results.export$Sign.padj_P <- ifelse(GSEA.results.export$p.adjust_P < 0.05 & !is.na(GSEA.results.export$p.adjust_P), "*","")
+GSEA.results.export$Sign.padj_T <- ifelse(GSEA.results.export$p.adjust_T < 0.05 & !is.na(GSEA.results.export$p.adjust_T), "*","")
+GSEA.results.export$Sign.padj_both <- ifelse(GSEA.results.export$Sign.padj_P =="*" & GSEA.results.export$Sign.padj_T =="*", "*","")
+
+```
+
+
+# Filter for subtype-specificity and summarize per subtype
+
+
+```{r }
+subtypes <- c("SCLC-A", "SCLC-N", "SCLC-P", "SCLC-Y")
+
+subtype.specific <- list("A" = GSEA.results.export,
+                         "N" = GSEA.results.export,
+                         "P" = GSEA.results.export,
+                         "Y" = GSEA.results.export)
+
+for (i in 1:length(subtypes)){
+  GSEA.results.export.sub <- GSEA.results.export[grepl(subtypes[i], GSEA.results.export$Comparison),]
+  
+  #table <- trans.geneset
+  #append <- "_T"
+  select.significant <- function(table, append){
+    genesets <- na.omit(unique(table$ID))
+    genesets.in3 <- vector()
+
+    for (j in 1:length(genesets)){
+      if (nrow(table[table$ID == genesets[j],]) ==3){
+        genesets.in3[j] <- genesets[j]
+      }
+    }
+    
+    genesets.all <- na.omit(genesets.in3)
+    
+    for (j in 1:length(genesets.all)){
+      sub.table <- table[table$ID == genesets.all[[j]],]
+      if ( (sub.table[1,paste0("NES",append)] > 0 & sub.table[2,paste0("NES",append)] > 0 &
+            sub.table[3,paste0("NES",append)] > 0) | 
+           (sub.table[1,paste0("NES",append)] < 0 & sub.table[2,paste0("NES",append)] < 0 &
+            sub.table[3,paste0("NES",append)] < 0)){
+        genesets.all[j] <- genesets.all[j]
+      }
+      else {
+        genesets.all[j] <- NA
+      }
+    }
+    
+    genesets.all <- na.omit(genesets.all)
+    
+    append2 <- c("_P","_T")
+    append2 <- append2[append2!=append]
+    
+    if (!isEmpty(genesets.all)){
+      GeneSet.summary <- data.frame(GeneSets = genesets.all,
+                                  OtherOmics = NA)
+    
+    
+      for (j in 1:length(genesets.all)){
+        subtab <- table[table$ID == genesets.all[j],]
+        subtab[,paste0("pvalue",append2)] <- ifelse(is.na(subtab[,paste0("pvalue",append2)]),1, subtab[,paste0("pvalue",append2)])
+        
+        if (subtab[1,paste0("pvalue",append2)] > 0.1  & 
+            subtab[2,paste0("pvalue",append2)] > 0.1 & subtab[3,paste0("pvalue",append2)] > 0.1 ){
+          GeneSet.summary[j,2] <- "Not.detected"
+        } else if (subtab[1,paste0("pvalue",append2)] < 0.1  & 
+                   subtab[2,paste0("pvalue",append2)] < 0.1 & subtab[3,paste0("pvalue",append2)] < 0.1 ){
+          
+          if ((subtab[1,paste0("NES",append)] > 0  & 
+               subtab[1,paste0("NES",append2)] > 0 & subtab[2,paste0("NES",append2)] > 0 &
+               subtab[3,paste0("NES",append2)] > 0) | 
+              (subtab[1,paste0("NES",append)] < 0  & 
+               subtab[1,paste0("NES",append2)] < 0 & subtab[2,paste0("NES",append2)] < 0 &
+               subtab[3,paste0("NES",append2)] < 0)){
+            GeneSet.summary[j,2] <- "Support"
+          } else if ((subtab[1,paste0("NES",append)] > 0  & 
+                      subtab[1,paste0("NES",append2)] < 0 & subtab[2,paste0("NES",append2)] < 0 &
+                      subtab[3,paste0("NES",append2)] < 0) | 
+                     (subtab[1,paste0("NES",append)] < 0  & 
+                      subtab[1,paste0("NES",append2)] > 0 & subtab[2,paste0("NES",append2)] > 0 &
+                      subtab[3,paste0("NES",append2)] > 0)){
+            GeneSet.summary[j,2] <- "Contradict"
+          } else {
+            GeneSet.summary[j,2] <- "Mixed"
+          }
+        } else {
+          GeneSet.summary[j,2] <- "Unclear"
+        }
+      }
+    } else {
+      GeneSet.summary <- data.frame(GeneSets = "",
+                                  OtherOmics = "")
+    }
+     
+    
+    colnames(GeneSet.summary)[2] <- paste0(colnames(GeneSet.summary)[2],append)
+    
+    GeneSet.summary$OtherOmics <- paste(GeneSet.summary$OtherOmics, paste0("in",append2), sep="_")
+    
+    return(GeneSet.summary)
+  }
+  
+  
+  prot.geneset <- subset(GSEA.results.export.sub, GSEA.results.export.sub$pvalue_P < 0.01)
+  for (j in 1:nrow(prot.geneset)){
+    if (grepl(paste0("-",subtypes[i]), prot.geneset$Comparison[j])){
+      prot.geneset$NES_P[j] <- prot.geneset$NES_P[j] * (-1)
+      prot.geneset$NES_T[j] <- prot.geneset$NES_T[j] * (-1)
+    }
+  }
+  trans.geneset <- subset(GSEA.results.export.sub, GSEA.results.export.sub$pvalue_T < 0.01)
+  trans.geneset
+  for (j in 1:nrow(trans.geneset)){
+    if (grepl(paste0("-",subtypes[j]), trans.geneset$Comparison[j])){
+      trans.geneset$NES_P[j] <- trans.geneset$NES_P[j] * (-1)
+      trans.geneset$NES_T[j] <- trans.geneset$NES_T[j] * (-1)
+    }
+  }
+  
+  
+  prot.geneset.all <- select.significant(prot.geneset,"_P")
+  trans.geneset.all <- select.significant(trans.geneset,"_T")
+  
+  both.geneset.all <- merge(prot.geneset.all, trans.geneset.all, by="GeneSets", all=T)
+  
+  subtype.specific[[i]] <- GSEA.results.export.sub[GSEA.results.export.sub$ID %in% both.geneset.all$GeneSets,]
+  subtype.specific[[i]] <- subtype.specific[[i]][order(subtype.specific[[i]]$ID),]
+  
+  subtype.specific[[i]]$Specificity_P <- ""
+  subtype.specific[[i]]$Specificity_T <- ""
+  
+  for (j in 1:length(both.geneset.all$GeneSets)){
+    if (both.geneset.all$GeneSets[j] %in% prot.geneset.all$GeneSets){
+      subtype.specific[[i]][subtype.specific[[i]]$ID == both.geneset.all$GeneSets[j],"Specificity_P"] <- "*"
+    }
+    if (both.geneset.all$GeneSets[j] %in% trans.geneset.all$GeneSets){
+      subtype.specific[[i]][subtype.specific[[i]]$ID == both.geneset.all$GeneSets[j],"Specificity_T"] <- "*"
+    }
+  }
+  
+  subtype.specific[[i]] <- list(Prot = prot.geneset.all,
+                                Trans = trans.geneset.all)
+  
+}
+
+
+GSEA.results.export[,c("Specificity_forA" , "Specificity_forN", "Specificity_forP", "Specificity_forY")] <- ""
+
+
+for (i in 1:nrow(GSEA.results.export)){
+  Specificity <- vector()
+  Direction <- vector()
+  if (GSEA.results.export$ID[i] %in% subtype.specific$A$Prot$GeneSets){
+    Specificity <- c(Specificity, "P")
+    Direction <- c(Direction, subtype.specific$A$Prot[subtype.specific$A$Prot$GeneSets == GSEA.results.export$ID[i],2])
+  } else { 
+    Specificity <- c(Specificity, "")
+    Direction <- c(Direction, "")
+    }
+  if (GSEA.results.export$ID[i] %in% subtype.specific$A$Trans$GeneSets){
+    Specificity <- c(Specificity, "T")
+    Direction <- c(Direction, subtype.specific$A$Trans[subtype.specific$A$Trans$GeneSets == GSEA.results.export$ID[i],2])
+  } else { 
+    Specificity <- c(Specificity, "")
+    Direction <- c(Direction, "")
+    }
+  GSEA.results.export$Specificity_forA[i] <- paste(Specificity, collapse = "")
+  GSEA.results.export$Direction_OtherOmics_forA[i] <- paste(Direction, collapse = "")
+  
+  
+  Specificity <- vector()
+  Direction <- vector()
+  if (GSEA.results.export$ID[i] %in% subtype.specific$N$Prot$GeneSets){
+    Specificity <- c(Specificity, "P")
+    Direction <- c(Direction, subtype.specific$N$Prot[subtype.specific$N$Prot$GeneSets == GSEA.results.export$ID[i],2])
+  } else { 
+    Specificity <- c(Specificity, "")
+    Direction <- c(Direction, "")
+    }
+  if (GSEA.results.export$ID[i] %in% subtype.specific$N$Trans$GeneSets){
+    Specificity <- c(Specificity, "T")
+    Direction <- c(Direction, subtype.specific$N$Trans[subtype.specific$N$Trans$GeneSets == GSEA.results.export$ID[i],2])
+  } else { 
+    Specificity <- c(Specificity, "")
+    Direction <- c(Direction, "")
+    }
+  GSEA.results.export$Specificity_forN[i] <- paste(Specificity, collapse = "")
+  GSEA.results.export$Direction_OtherOmics_forN[i] <- paste(Direction, collapse = "")
+  
+  
+  Specificity <- vector()
+  Direction <- vector()
+  if (GSEA.results.export$ID[i] %in% subtype.specific$P$Prot$GeneSets){
+    Specificity <- c(Specificity, "P")
+    Direction <- c(Direction, subtype.specific$P$Prot[subtype.specific$P$Prot$GeneSets == GSEA.results.export$ID[i],2])
+  } else { 
+    Specificity <- c(Specificity, "")
+    Direction <- c(Direction, "")
+    }
+  if (GSEA.results.export$ID[i] %in% subtype.specific$P$Trans$GeneSets){
+    Specificity <- c(Specificity, "T")
+    Direction <- c(Direction, subtype.specific$P$Trans[subtype.specific$P$Trans$GeneSets == GSEA.results.export$ID[i],2])
+  } else { 
+    Specificity <- c(Specificity, "")
+    Direction <- c(Direction, "")
+    }
+  GSEA.results.export$Specificity_forP[i] <- paste(Specificity, collapse = "")
+  GSEA.results.export$Direction_OtherOmics_forP[i] <- paste(Direction, collapse = "")
+  
+  
+  Specificity <- vector()
+  Direction <- vector()
+  if (GSEA.results.export$ID[i] %in% subtype.specific$Y$Prot$GeneSets){
+    Specificity <- c(Specificity, "P")
+    Direction <- c(Direction, subtype.specific$Y$Prot[subtype.specific$Y$Prot$GeneSets == GSEA.results.export$ID[i],2])
+  } else { 
+    Specificity <- c(Specificity, "")
+    Direction <- c(Direction, "")
+    }
+  if (GSEA.results.export$ID[i] %in% subtype.specific$Y$Trans$GeneSets){
+    Specificity <- c(Specificity, "T")
+    Direction <- c(Direction, subtype.specific$Y$Trans[subtype.specific$Y$Trans$GeneSets == GSEA.results.export$ID[i],2])
+  } else { 
+    Specificity <- c(Specificity, "")
+    Direction <- c(Direction, "")
+    }
+  GSEA.results.export$Specificity_forY[i] <- paste(Specificity, collapse = "")
+  GSEA.results.export$Direction_OtherOmics_forY[i] <- paste(Direction, collapse = "")
+  
+  
+}
+
+
+
+```
+
+
+```{r }
+GSEA.results.export.specific <- GSEA.results.export[GSEA.results.export$Specificity_forA !="" |
+                                                      GSEA.results.export$Specificity_forN !="" |
+                                                      GSEA.results.export$Specificity_forP !="" | 
+                                                      GSEA.results.export$Specificity_forY !="",]
+
+GSEA.results.export.specific <-GSEA.results.export.specific[,c("ID", "Comparison", "NES_P", "NES_T", "pvalue_P", "pvalue_T",
+                                                               "core_enrichment_P", "core_enrichment_T", "core_enrichment_both",
+                                                               "p.adjust_P", "p.adjust_T", "Specificity_forA",
+                                                               "Specificity_forN", "Specificity_forP", "Specificity_forY",
+                                                               "Direction_OtherOmics_forA", "Direction_OtherOmics_forN",
+                                                               "Direction_OtherOmics_forP", "Direction_OtherOmics_forY",
+                                                               "setSize_P", "setSize_T", "enrichmentScore_P", "enrichmentScore_T", 
+                                                               "qvalues_P", "qvalues_T", "leading_edge_P", "leading_edge_T")]
+
+
+```
+
+
+```{r , fig.width=12, fig.height=8}
+
+#subtype <- "SCLC-A"
+#append <- "_forA"
+#Results <- GSEA.results.export.specific
+summarize <- function(Results, subtype, append){
+  pathways <- unique(GSEA.results.export.specific[GSEA.results.export.specific[,paste0("Specificity",append)] !="","ID"])
+  Results.N <- Results[Results$ID %in% pathways,]
+  Results.N <- Results.N[grep(subtype, Results.N$Comparison),]
+  
+  for (i in 1:nrow(Results.N)){
+    if (grepl(paste0("-",subtype), Results.N$Comparison[i])){
+      Results.N$NES_P[i] <- Results.N$NES_P[i] * (-1)
+      Results.N$NES_T[i] <- Results.N$NES_T[i] * (-1)
+    }
+    Results.N$NES_P[i] <- ifelse(is.na(Results.N$NES_P[i]), 0, Results.N$NES_P[i])
+    Results.N$NES_T[i] <- ifelse(is.na(Results.N$NES_T[i]), 0, Results.N$NES_T[i])
+  }
+  
+  
+  Results.N.genesets <- unique(Results.N$ID)
+  Results.N.averaged <- data.frame(GeneSet = unique(Results.N$ID),
+                                   Avr.NES_P = NA,
+                                   Avr.NES_T = NA, 
+                                   Significance = NA,
+                                   Color = NA,
+                                   Significance.Detailed = NA,
+                                   Core.Enrichment_P = NA,
+                                   Core.Enrichment_T = NA,
+                                   Core.Enrichment_Both = NA,
+                                   row.names = unique(Results.N$ID))
+  
+  for (i in 1:length(Results.N.genesets)){
+    Results.N.averaged[Results.N.genesets[i], "Avr.NES_P"] <- mean(Results.N[Results.N$ID == Results.N.genesets[i],"NES_P"])
+    Results.N.averaged[Results.N.genesets[i], "Avr.NES_T"] <- mean(Results.N[Results.N$ID == Results.N.genesets[i],"NES_T"])
+    
+    Results.N.averaged[Results.N.genesets[i], "Significance.Detailed"] <- paste0(Results.N[Results.N$ID == Results.N.genesets[i],
+                                                                                           paste0("Specificity",append)][1], "__",
+                                                                        Results.N[Results.N$ID == Results.N.genesets[i],
+                                                                                  paste0("Direction_OtherOmics",append)][1])
+    
+    if (Results.N.averaged[Results.N.genesets[i], "Avr.NES_P"] < 0 & 
+        Results.N.averaged[Results.N.genesets[i], "Avr.NES_T"] < 0){
+      Results.N.averaged[Results.N.genesets[i], "Color"] <- "C"
+    } else if (Results.N.averaged[Results.N.genesets[i], "Avr.NES_P"] > 0 & 
+               Results.N.averaged[Results.N.genesets[i], "Avr.NES_T"] > 0){
+      Results.N.averaged[Results.N.genesets[i], "Color"] <- "A"
+    } else {
+      Results.N.averaged[Results.N.genesets[i], "Color"] <- "B"
+    }
+    
+    core.enrich.prot <- unique(unlist(lapply(Results.N[Results.N$ID == Results.N.genesets[i],"core_enrichment_P"], function(x){
+      strsplit(x, split="/", fixed=T)[[1]]
+    })))
+    Results.N.averaged[Results.N.genesets[i], "Core.Enrichment_P"] <- paste(core.enrich.prot, collapse="/")
+    core.enrich.trans <- unique(unlist(lapply(Results.N[Results.N$ID == Results.N.genesets[i],"core_enrichment_T"], function(x){
+      strsplit(x, split="/", fixed=T)[[1]]
+    })))
+    Results.N.averaged[Results.N.genesets[i], "Core.Enrichment_T"] <- paste(core.enrich.trans, collapse="/")
+    
+    Results.N.averaged[Results.N.genesets[i], "Core.Enrichment_Both"] <- paste(intersect(core.enrich.prot,core.enrich.trans), collapse="/")
+    
+  }
+  
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="P__Mixed", 
+                                                     "Prot*_Trans.Mixed", Results.N.averaged$Significance.Detailed)
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="P__Not.detected", 
+                                                     "Prot*_Trans.Not.detected", Results.N.averaged$Significance.Detailed)
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="P__Support", 
+                                                     "Prot*_Trans.Support", Results.N.averaged$Significance.Detailed)
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="P__Unclear", 
+                                                     "Prot*_Trans.Unclear", Results.N.averaged$Significance.Detailed)
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="PT__SupportSupport", 
+                                                     "Prot*_Trans*", Results.N.averaged$Significance.Detailed)
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="T__Mixed", 
+                                                     "Trans*_Prot.Mixed", Results.N.averaged$Significance.Detailed)
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="T__Not.detected", 
+                                                     "Trans*_Prot.Not.detected", Results.N.averaged$Significance.Detailed)
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="T__Support", 
+                                                     "Trans*_Prot.Support", Results.N.averaged$Significance.Detailed)
+  Results.N.averaged$Significance.Detailed <- ifelse(Results.N.averaged$Significance.Detailed =="T__Unclear", 
+                                                     "Trans*_Prot.Unclear", Results.N.averaged$Significance.Detailed)
+  
+  Results.N.averaged$Significance <- Results.N.averaged$Significance.Detailed
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Prot*_Trans.Mixed", 
+                                            "Mixed",Results.N.averaged$Significance)
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Prot*_Trans.Not.detected", 
+                                            "Only.Proteomics",Results.N.averaged$Significance)
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Prot*_Trans.Support", 
+                                            "Both",Results.N.averaged$Significance)
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Prot*_Trans.Unclear", 
+                                            "Only.Proteomics",Results.N.averaged$Significance)
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Prot*_Trans*", 
+                                            "Both", Results.N.averaged$Significance)
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Trans*_Prot.Mixed", 
+                                            "Mixed",Results.N.averaged$Significance)
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Trans*_Prot.Not.detected",
+                                            "Only.Transcriptomics",Results.N.averaged$Significance)
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Trans*_Prot.Support", 
+                                            "Both", Results.N.averaged$Significance)
+  Results.N.averaged$Significance <- ifelse(Results.N.averaged$Significance =="Trans*_Prot.Unclear", 
+                                            "Only.Transcriptomics",Results.N.averaged$Significance)
+  
+  Results.N.averaged$Color <- ""
+  Results.N.averaged$Color <- ifelse(Results.N.averaged$Significance =="Both", "#FF0000",Results.N.averaged$Color)
+  Results.N.averaged$Color <- ifelse(Results.N.averaged$Significance =="Only.Proteomics", "#0000FF",Results.N.averaged$Color)
+  Results.N.averaged$Color <- ifelse(Results.N.averaged$Significance =="Only.Transcriptomics", "#000000",Results.N.averaged$Color)
+
+  
+  colornames <- c("#FF0000", "#0000FF", "#000000")
+  names(colornames) <- c("Both", "Only.Proteomics","Only.Transcriptomics")
+  
+  Results.N.averaged$Subtype <- subtype
+  
+  
+  colorsign <- unique(Results.N.averaged$Significance)
+  colornames <- colornames[names(colornames) %in% colorsign]
+  
+  Xspec.gg <- ggplot(Results.N.averaged, aes(x=Avr.NES_T, y=Avr.NES_P, label=GeneSet, color = Significance)) + 
+    geom_point() +geom_text_repel(size = 4,max.overlaps = 1000) + ggtitle(paste0("Specific to ",subtype))+
+    xlim(c(-2.2,2.2)) + ylim (-2.2,2.2)+
+    geom_hline(yintercept=0, linetype="dashed", color = "darkgrey")+geom_vline(xintercept=0, linetype="dashed", color = "darkgrey")+
+    theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
+    xlab("Transcriptomics, Average NES")+ ylab("Proteomics, Average NES")+#+theme(legend.position="none") 
+  scale_color_manual(values=colornames) 
+  print(Xspec.gg)
+  return(Results.N.averaged)
+}
+
+#subtype <- "SCLC-A"
+#append <- "_forA"
+#pathways <- unique(GSEA.results.export.specific[GSEA.results.export.specific$Specificity_forA !="","ID"])
+#Results <- GSEA.results.export.specific
+
+GSEA.results.export.specific.GraphPad <- summarize(GSEA.results.export.specific, "SCLC-A",  "_forA")
+GSEA.results.export.specific.GraphPad <- rbind(GSEA.results.export.specific.GraphPad, 
+                                               summarize(GSEA.results.export.specific, "SCLC-N", "_forN"))
+GSEA.results.export.specific.GraphPad <- rbind(GSEA.results.export.specific.GraphPad, 
+                                               summarize(GSEA.results.export.specific, "SCLC-P", "_forP"))
+GSEA.results.export.specific.GraphPad <- rbind(GSEA.results.export.specific.GraphPad, 
+                                               summarize(GSEA.results.export.specific, "SCLC-Y", "_forY"))
+
+
+
+```
+
+# Export results
+
+
+```{r }
+wb <- createWorkbook(
+  title = NULL,
+)
+
+addWorksheet(wb, "pGSEA_detailed_p<0.01")
+writeData(
+  wb = wb,
+  sheet = "pGSEA_detailed_p<0.01",
+  x = GSEA.results.export.specific)
+
+addWorksheet(wb, "pGSEA_summarized")
+writeData(
+  wb = wb,
+  sheet = "pGSEA_summarized",
+  x = GSEA.results.export.specific.GraphPad)
+
+saveWorkbook(wb, "Files/Supplementary_GSEA_results_subtypeSpecific.xlsx", overwrite = TRUE)
+
+```
+
+
+
