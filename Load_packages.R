@@ -1,6 +1,6 @@
 ##############################
 #
-# List of used packages
+# Load all used packages
 #
 # Written by Beáta Szeitz
 # Project: SCLC proteomics
@@ -12,10 +12,4 @@ packages = c("ggplot2","ggbiplot","ggplotify", "ggpubr","lme4", "circlize","Comp
              "enrichplot", "gridExtra", "cowplot", "ConsensusClusterPlus","amap", "cluster", "S4Vectors", "mixOmics",
              "reshape2", "varhandle", "DTK", "car")
 
-package.check <- lapply(packages, function(x) {
-    if (!require(x, character.only = T)) {
-      install.packages(x, dependencies = T)
-      library(x, character.only = T)
-    }
-  }
-)
+lapply(packages, function(x) {library(x)})
