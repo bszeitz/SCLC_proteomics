@@ -12,4 +12,4 @@ packages = c("ggplot2","ggbiplot","ggplotify", "ggpubr","lme4", "circlize","Comp
              "enrichplot", "gridExtra", "cowplot", "ConsensusClusterPlus","amap", "cluster", "S4Vectors", "mixOmics",
              "reshape2", "varhandle", "DTK", "car")
 
-lapply(packages, function(x) {library(x)})
+lapply(packages, function(x) {library(x, character.only = T)})
