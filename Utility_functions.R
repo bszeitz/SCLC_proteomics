@@ -431,19 +431,20 @@ read_in_with_rowname <- function(filename, include.rowname){
 # 
 # Arguments for this function:
 # - df: the dataframe to be exported
+# - ID.col: the column with row names
 # - exportname: the name of the new gct file
 #
 # This function exports an expression table in gct format (required for ssGSEA).
 #
 # Packages required: none
 #
-save_as_gct <- function(df, exportname){
-  decoy <- matrix(nrow=3, ncol=ncol(df)+2)
+save_as_gct <- function(df, ID.col,exportname){
+  decoy <- matrix(nrow=3, ncol=ncol(df)+1)
   decoy[1,1] <- "#1.2"
-  decoy[2,1:2] <- c(nrow(df), ncol(df))
-  decoy[3,] <- c("NAME","Description", colnames(df))
+  decoy[2,1:2] <- c(nrow(df), ncol(df)-1)
+  decoy[3,] <- c("NAME","Description", colnames(df)[-grep(ID.col, colnames(df))])
   
-  df <- cbind(row.names(df), row.names(df), df)
+  df <- cbind(df[,ID.col], df[,ID.col], df[,-grep(ID.col, colnames(df))])
   colnames(df)[1:2] <- c("NAME","Description")
   colnames(decoy) <- colnames(df)
   
@@ -637,7 +638,7 @@ ANOVAandTK_padj_rank <- function(m, annotation, colname_for_factor, levelOrder, 
 #
 # Packages required: varhandle, DTK, reshape2
 #
-Kruskal_posthoc_adj <- function(m, annotation, colname_for_factor, levelOrder, analysisName="") {
+Kruskal_posthoc_adj <- function(m, annotation, colname_for_factor, levelOrder, analysisName="", min.perc.in.group) {
   annotation = as.matrix(cbind(row.names(annotation), annotation[,colname_for_factor]))
   colnames(annotation) <- c("Sample", colname_for_factor)
   annotation <- as.data.frame(annotation)
@@ -657,7 +658,7 @@ Kruskal_posthoc_adj <- function(m, annotation, colname_for_factor, levelOrder, a
   min.sample.sizes <- vector(length=length(levels(annotation[,2])))
   names(min.sample.sizes) <- levels(annotation[,2])
   for (i in 1:length(min.sample.sizes)){
-    min.sample.sizes[i] <- nrow(annotation[annotation[,2]==names(min.sample.sizes)[i],]) * 0.7
+    min.sample.sizes[i] <- nrow(annotation[annotation[,2]==names(min.sample.sizes)[i],]) * min.perc.in.group
   }
   
   p.v <- matrix(nrow=nrow(m), ncol=1)
@@ -752,4 +753,46 @@ Kruskal_posthoc_adj <- function(m, annotation, colname_for_factor, levelOrder, a
   table_results <- as.data.frame(table_results)
   table_results$Accession <- row.names(m)
   return(table_results)
+}
+
+
+##############################
+# Perform Shapiro-Wilk Normality Test
+# 
+# Arguments for this function:
+# - m: an expression table where samples are in columns and
+#   features are in rows
+#
+# This function returns a result table (dataframe) that contains:
+# - Accession (i.e., the row names)
+# - Shapiro-Wilk normality test p-value
+#
+# Packages required: stats
+#
+SW_normality_test <- function(m){
+  #x <- GDSC1.SCLC.Resp.F[1,]
+  SW.pvalues <- apply(m, 1, function(x){
+    res <- shapiro.test(as.numeric(x))
+    return(res$p.value)
+  })
+  return(data.frame(Accession = row.names(m),
+                    Shapiro.Wilk.pv = SW.pvalues))
+}
+
+##############################
+# Perform min-max scaling
+# 
+# Arguments for this function:
+# - values: a vector with numbers that should be scaled
+#
+# This function returns a vector of scaled values.
+#
+# Packages required: none
+#
+min_max_scaling <- function(values){
+  values <- as.numeric(values)
+  min.value <- min(values, na.rm=T)
+  max.value <- max(values, na.rm=T)
+  scaled.values <- (values - min.value) / (max.value - min.value)
+  return(scaled.values)
 }

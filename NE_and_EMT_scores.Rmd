@@ -11,7 +11,8 @@ output:
 
 
 ```{r }
-source("Install_load_packages.R")
+# R vs.4.2.0
+source("Load_packages.R")
 source("Utility_functions.R")
 source("Color_list.R")
 ```
@@ -70,6 +71,8 @@ column.ha <- create_heatmapannot(Annot, c("Subtype", "Culture type","Cell line o
 ```
 
 
+## Heatmap of all NE markers
+
 ```{r , fig.width=15, fig.height=8}
 draw(Heatmap(NE.expression, column_title ="CP - Zhang NE and non-NE proteins",
                      name="Z-score",
@@ -111,6 +114,8 @@ save(NE.expression, column.ha.NE, Zhang2018, file= "RData/NE_markers_heatmap.RDa
 
 ```
 
+
+## Calculate NE scores
 
 
 ```{r }
@@ -173,6 +178,7 @@ ggplot(NEscores, aes(x=Subtype, y=Mean, fill=Subtype)) +
                   position=position_dodge(.9))
 
 ```
+## Heatmap of avr. NE 
 
 
 ```{r }
@@ -256,6 +262,8 @@ for (i in 1:nrow(EMT.expression)){
 }
 ```
 
+## Heatmap of all EMT markers
+
 
 ```{r }
 column.ha <- create_heatmapannot(Annot, c("Subtype", "Culture type","Cell line origin","Chemo"), colorlist)
@@ -302,6 +310,8 @@ column.ha.EMT <- column.ha
 save(EMT.expression, column.ha.EMT, Kohn2014, file= "RData/EMT_markers_heatmap.RData")
 
 ```
+
+## Calculate EMT scores
 
 
 ```{r }
@@ -359,6 +369,8 @@ ggplot(EMTscores, aes(x=Subtype, y=Mean, fill=Subtype)) +
 Annot$EMTscore <- EMTscores[Annot$Sample,"Avr.Zscore"]
 
 ```
+
+## Heatmap of avr EMT
 
 
 ```{r }

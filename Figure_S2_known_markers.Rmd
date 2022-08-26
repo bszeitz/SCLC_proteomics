@@ -1,0 +1,703 @@
+---
+title: "Figure S2"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+```{r }
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+ 
+```{r Load files}
+Annot <- read_in_with_rowname("Files/Annotation",F)
+#Scores <- read_in_with_rowname("Files/NE_EMT_scores",F)
+#Annot <- merge(Annot, Scores[,c("Sample", "NEscore", "EMTscore")], by="Sample")
+row.names(Annot) <- Annot$Sample
+CP.expr.imp <- read_in_with_rowname("Files/CP_expression_filtered_imputed",F)[,Annot$Sample]
+CM.expr.imp <- read_in_with_rowname("Files/CM_expression_filtered_imputed",F)[,Annot$Sample]
+CP.expr <- read_in_with_rowname("Files/CP_expression_full",F)[,Annot$Sample]
+CM.expr <- read_in_with_rowname("Files/CM_expression_full",F)[,Annot$Sample]
+prot.to.gene <- read_in_with_rowname("Files/Protein_to_Gene",F)
+CP.expr.imp.genes <- prot.to.gene[prot.to.gene$Protein %in% row.names(CP.expr.imp),"Gene"]
+```
+
+
+
+# RB1 and TP53 mutations
+
+RB1 = P06400
+TP53 = P04637
+
+
+```{r }
+CP.expr.RB1.TP53 <- CP.expr[c("P06400", "P04637"),]
+```
+
+## Load mutation data and extend sample annotation table with mutation status
+
+```{r}
+CCLE.muts <- read.csv("Files/DepMap/CCLE_mutations.csv")
+CCLE.sample <- read.csv("Files/DepMap/sample_info.csv")
+CCLE.sample.SCLC <- CCLE.sample[CCLE.sample$Subtype =="Small Cell Lung Cancer (SCLC)",]
+
+```
+
+
+7 cell lines were not included in the RNA sequencing study: !H378, !H1688, H1882, N417, GLC4, H372, HLHE
+5 cell lines were not included in the mutations study: GLC4, HLHE, H1882, N417, H372
+
+
+Match cell line IDs:
+```{r }
+Annot$stripped_cell_line_name <- Annot$Sample
+
+Annot$stripped_cell_line_name <- ifelse(startsWith(Annot$stripped_cell_line_name,"H"), paste("NCI",Annot$stripped_cell_line_name,
+                                                                                             sep=""), Annot$stripped_cell_line_name)
+Annot$stripped_cell_line_name <- ifelse(Annot$stripped_cell_line_name =="CRL2177", "SW1271", Annot$stripped_cell_line_name)
+Annot$stripped_cell_line_name <- ifelse(Annot$stripped_cell_line_name =="CRL2066", "DMS114", Annot$stripped_cell_line_name)
+
+
+#Annot$stripped_cell_line_name[Annot$stripped_cell_line_name %in% CCLE.sample$stripped_cell_line_name]
+Annot$stripped_cell_line_name[!Annot$stripped_cell_line_name %in% CCLE.sample$stripped_cell_line_name]
+
+
+Annot$stripped_cell_line_name <- ifelse(!Annot$stripped_cell_line_name %in% CCLE.sample$stripped_cell_line_name, Annot$Sample, Annot$stripped_cell_line_name)
+
+CCLE.sample.SCLC <- CCLE.sample.SCLC[CCLE.sample.SCLC$stripped_cell_line_name %in% Annot$stripped_cell_line_name,]
+
+
+Annot.extended <- merge(Annot, CCLE.sample.SCLC[,-grep("Subtype",colnames(CCLE.sample.SCLC))], by="stripped_cell_line_name", all.x=T)
+
+```
+
+```{r }
+CCLE.muts.RB1.TP53 <- CCLE.muts[CCLE.muts$Hugo_Symbol %in% c("RB1","TP53") & CCLE.muts$DepMap_ID %in% Annot.extended$DepMap_ID,]
+
+#CCLE.muts.RB1.TP53.sample.unique <- unique(CCLE.muts.RB1.TP53[,c("Hugo_Symbol", "DepMap_ID")])
+RB1.mutated <- unique(CCLE.muts.RB1.TP53[CCLE.muts.RB1.TP53$Hugo_Symbol=="RB1","DepMap_ID"])
+TP53.mutated <- unique(CCLE.muts.RB1.TP53[CCLE.muts.RB1.TP53$Hugo_Symbol=="TP53","DepMap_ID"])
+
+
+```
+
+```{r }
+Annot.extended$TP53.mutation <- NA
+Annot.extended$RB1.mutation <- NA
+
+for (i in 1:nrow(Annot.extended)){
+  if (is.na(Annot.extended$DepMap_ID[i])){
+    next
+  }
+  Annot.extended$TP53.mutation[i] <- ifelse(Annot.extended$DepMap_ID[i] %in% TP53.mutated, "Y", "N")
+  Annot.extended$RB1.mutation[i] <- ifelse(Annot.extended$DepMap_ID[i] %in% RB1.mutated, "Y", "N")
+}
+
+
+Annot.extended$RB1.expression <- as.numeric(CP.expr.RB1.TP53["P06400",Annot.extended$Sample])
+Annot.extended$RB1.expression <- ifelse(is.na(Annot.extended$RB1.expression),14.5,Annot.extended$RB1.expression)
+Annot.extended$TP53.expression <- as.numeric(CP.expr.RB1.TP53["P04637",Annot.extended$Sample])
+Annot.extended$TP53.expression <- ifelse(is.na(Annot.extended$TP53.expression),14.5,Annot.extended$TP53.expression)
+
+```
+
+
+```{r }
+CCLE.muts.RB1.TP53.short <- CCLE.muts.RB1.TP53[,c("Hugo_Symbol", "Variant_Classification", "isDeleterious", "DepMap_ID")]
+
+```
+
+
+
+```{r }
+Annot.extended$TP53.mutation <- NA
+Annot.extended$RB1.mutation <- NA
+
+Annot.extended$TP53.Variant_Classification <- NA
+Annot.extended$TP53.isDeleterious <- NA
+Annot.extended$RB1.Variant_Classification <- NA
+Annot.extended$RB1.isDeleterious <- NA
+
+
+for (i in 1:nrow(Annot.extended)){
+  if (is.na(Annot.extended$DepMap_ID[i])){
+    next
+  }
+  
+  Annot.extended$TP53.mutation[i] <-nrow(CCLE.muts.RB1.TP53.short[CCLE.muts.RB1.TP53.short$DepMap_ID==Annot.extended$DepMap_ID[i] &
+                                                                    CCLE.muts.RB1.TP53.short$Hugo_Symbol=="TP53",])
+  Annot.extended$TP53.Variant_Classification[i]<-paste(CCLE.muts.RB1.TP53.short[CCLE.muts.RB1.TP53.short$DepMap_ID==Annot.extended$DepMap_ID[i] &
+                                                                    CCLE.muts.RB1.TP53.short$Hugo_Symbol=="TP53","Variant_Classification"],
+                                                  collapse = "__")
+  Annot.extended$TP53.isDeleterious[i]<-paste(CCLE.muts.RB1.TP53.short[CCLE.muts.RB1.TP53.short$DepMap_ID==Annot.extended$DepMap_ID[i] &
+                                                                    CCLE.muts.RB1.TP53.short$Hugo_Symbol=="TP53","isDeleterious"],
+                                                  collapse = "__")
+  Annot.extended$RB1.mutation[i] <-nrow(CCLE.muts.RB1.TP53.short[CCLE.muts.RB1.TP53.short$DepMap_ID==Annot.extended$DepMap_ID[i] &
+                                                                    CCLE.muts.RB1.TP53.short$Hugo_Symbol=="RB1",])
+  Annot.extended$RB1.Variant_Classification[i]<-paste(CCLE.muts.RB1.TP53.short[CCLE.muts.RB1.TP53.short$DepMap_ID==Annot.extended$DepMap_ID[i] &
+                                                                    CCLE.muts.RB1.TP53.short$Hugo_Symbol=="RB1","Variant_Classification"],
+                                                  collapse = "__")
+  Annot.extended$RB1.isDeleterious[i]<-paste(CCLE.muts.RB1.TP53.short[CCLE.muts.RB1.TP53.short$DepMap_ID==Annot.extended$DepMap_ID[i] &
+                                                                    CCLE.muts.RB1.TP53.short$Hugo_Symbol=="RB1","isDeleterious"],
+                                                  collapse = "__")
+}
+
+Annot.extended$RB1.mutation <- ifelse(Annot.extended$RB1.mutation >0, "Mut", "WT")
+Annot.extended$TP53.mutation <- ifelse(Annot.extended$TP53.mutation >0, "Mut", "WT")
+
+View(Annot.extended[,c("Sample", "RB1.mutation", "RB1.Variant_Classification", "RB1.isDeleterious",
+                       "TP53.mutation", "TP53.Variant_Classification", "TP53.isDeleterious")])
+```
+
+
+Remove non-deleterious mutations if there is also a deleterious mutation within the same gene:
+```{r }
+Annot.extended[Annot.extended$Sample =="DMS53",c("TP53.Variant_Classification", "TP53.isDeleterious")] <- c("Nonsense_Mutation","True")
+Annot.extended[Annot.extended$Sample =="H1048",c("TP53.Variant_Classification", "TP53.isDeleterious")] <- c("Frame_Shift_Del","True")
+Annot.extended[Annot.extended$Sample =="H1694",c("RB1.Variant_Classification", "RB1.isDeleterious")] <- c("Splice_Site","True")
+
+```
+
+
+```{r , fig.width=15, fig.height=5}
+
+Annot.extended$RB1.mutation.extended <- ifelse(Annot.extended$RB1.mutation =="Mut" &
+                                                 Annot.extended$RB1.isDeleterious =="True", "Mut\n(deleterious)",
+                                               Annot.extended$RB1.mutation)
+Annot.extended$RB1.mutation.extended <- ifelse(Annot.extended$RB1.mutation =="Mut" &
+                                                 Annot.extended$RB1.isDeleterious !="True", "Mut\n(non-deleterious)",
+                                               Annot.extended$RB1.mutation.extended)
+
+Annot.extended$RB1.mutation.extended <- factor(Annot.extended$RB1.mutation.extended,
+                                               levels = c("WT","Mut\n(non-deleterious)", "Mut\n(deleterious)"))
+
+Annot.extended$TP53.mutation.extended <- ifelse(Annot.extended$TP53.mutation =="Mut" &
+                                                 Annot.extended$TP53.isDeleterious =="True", "Mut\n(deleterious)",
+                                               Annot.extended$TP53.mutation)
+Annot.extended$TP53.mutation.extended <- ifelse(Annot.extended$TP53.mutation =="Mut" &
+                                                 Annot.extended$TP53.isDeleterious !="True", "Mut\n(non-deleterious)",
+                                               Annot.extended$TP53.mutation.extended)
+
+Annot.extended$TP53.mutation.extended <- factor(Annot.extended$TP53.mutation.extended,
+                                               levels = c("WT","Mut\n(non-deleterious)", "Mut\n(deleterious)"))
+
+```
+
+## Boxplot
+
+```{r , fig.width=9, fig.height=3.5}
+Annot.extended.melt.1 <- Annot.extended[,c("Sample","Subtype", 
+                                           "RB1.mutation.extended", "RB1.Variant_Classification",
+                                           "RB1.expression")]
+colnames(Annot.extended.melt.1) <- c("Sample","Subtype","Mutation.status","Variant.classification", "Protein.expr")
+Annot.extended.melt.1$Gene <- "RB1"
+
+
+Annot.extended.melt.2 <- Annot.extended[,c("Sample","Subtype", 
+                                           "TP53.mutation.extended", "TP53.Variant_Classification",
+                                           "TP53.expression")]
+colnames(Annot.extended.melt.2) <- c("Sample","Subtype","Mutation.status","Variant.classification", "Protein.expr")
+Annot.extended.melt.2$Gene <- "TP53"
+
+Annot.extended.melt <- rbind(Annot.extended.melt.1, Annot.extended.melt.2)
+Annot.extended.melt$Variant.classification <- ifelse(Annot.extended.melt$Variant.classification =="","WT",
+                                                     Annot.extended.melt$Variant.classification)
+Annot.extended.melt$Variant.classification <- ifelse(grepl("Frame_Shift",Annot.extended.melt$Variant.classification),"Frame_Shift",
+                                                     Annot.extended.melt$Variant.classification)
+
+Annot.extended.melt <- Annot.extended.melt[!is.na(Annot.extended.melt$Mutation.status),]
+
+g <- ggplot(Annot.extended.melt,  
+       aes(x=Mutation.status, y=Protein.expr))+
+  geom_boxplot(alpha=0)+
+  geom_quasirandom(aes(color=Subtype, shape=Variant.classification),size=3)+ theme_bw()+
+  xlab("")+ylab("LFQ value")+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12,face="bold"))+
+  scale_color_manual(values=c("#0000FE", "#21FE06","gold", "#FB02FE"))+
+  scale_shape_manual(values=c(15,13,16,17,7))+stat_compare_means()
+g + facet_grid(cols = vars(Gene))+ 
+       theme(strip.text.x = element_text(size = 14))
+
+
+```
+
+## Heatmap
+
+
+```{r , fig.width=12, fig.height=5}
+Annot.extended$`TP53 mutation status` <- gsub("\n"," ",Annot.extended$TP53.mutation.extended, fixed = T)
+Annot.extended$`RB1 mutation status` <- gsub("\n"," ",Annot.extended$RB1.mutation.extended, fixed = T)
+
+column.ha = HeatmapAnnotation(df =Annot.extended[,c("TP53 mutation status", "RB1 mutation status",
+                                                    "Subtype", "Culture type","Cell line origin","Chemo" 
+                                                    )],
+                              which="col",
+                              col=colorlist,
+                              annotation_name_side = "right",
+                              gp = gpar(col = "grey"),
+                              gap = unit(c(1,2,1,1,1), 'mm'),
+                              show_legend = TRUE,
+                              show_annotation_name = TRUE)
+set.seed(12345)
+ht = Heatmap(#t(scale(t(CP.expr.RB1.TP53))),
+  CP.expr.RB1.TP53,
+  name="LFQ value",
+  #col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+  cluster_rows = T, top_annotation = column.ha, 
+  column_labels =  Annot.extended$Sample,
+  cluster_columns = T,
+  clustering_method_columns = "complete",
+  clustering_method_rows = "complete",
+  show_row_dend = F,
+  show_row_names = T,
+  row_labels = c("RB1","TP53"),
+  column_gap = unit(0.1, "cm"),
+  column_names_gp = gpar(fontsize = 12),
+  gap = unit(0.1, "cm"),
+  show_heatmap_legend = T,
+  show_column_names = T,
+  height = unit(1.25, "cm"),
+  heatmap_width = unit(11, "cm"))
+draw(ht, annotation_legend_side="bottom",
+          heatmap_legend_side="left")
+```
+
+
+```{r }
+pdf(file="Figures/RB1_TP53.pdf",width = 12, height = 5)
+draw(ht, annotation_legend_side="bottom",
+          heatmap_legend_side="left")
+dev.off()
+```
+
+
+# MYC family members, NFIB
+
+
+# Boxplots
+
+
+```{r }
+loaded <- load("RData/Fig_NE_EMT_correlations.RData")
+loaded
+
+loaded <- load("RData/CP_and_CM_DEA_CultureType.RData")
+loaded
+
+```
+
+```{r }
+CP.expr.imp.melt <- melt(t(scale(t(CP.expr.imp))))
+colnames(CP.expr.imp.melt) <- c("Protein","Sample", "LFQ")
+CP.expr.imp.melt <- CP.expr.imp.melt[CP.expr.imp.melt$Protein %in% c("P01106","P12524","O00712"),]
+
+CP.expr.imp.melt <-merge(CP.expr.imp.melt, Annot.NE.EMT, by="Sample")
+
+CP.expr.imp.melt$Gene <- ifelse(CP.expr.imp.melt$Protein=="P01106", "MYC", CP.expr.imp.melt$Protein)
+CP.expr.imp.melt$Gene <- ifelse(CP.expr.imp.melt$Protein=="P12524", "MYCL", CP.expr.imp.melt$Gene)
+CP.expr.imp.melt$Gene <- ifelse(CP.expr.imp.melt$Protein=="O00712", "NFIB", CP.expr.imp.melt$Gene)
+CP.expr.imp.melt$Subtype <- gsub("SCLC-","",CP.expr.imp.melt$Subtype)
+
+View(CP.Culture.ANOVA[c("P01106","P12524","O00712"),])
+
+```
+
+```{r , fig.width=10, fig.height=4}
+my.comparisons <- list( c("N", "A"),c("P", "A"), c("N", "P"), c("Y", "A"), c("Y", "N"), c("Y", "P") )
+
+g <- ggplot(CP.expr.imp.melt, aes(x=Subtype, y=LFQ, fill=Subtype))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("Z-score")+xlab("Subtype")+  scale_fill_manual(values = c("#0000FE", "#21FE06","gold", "#FB02FE"))+
+  stat_compare_means(comparisons = my.comparisons, method = "t.test")+ theme_bw()+
+  theme(strip.text = element_text(size = 14),axis.text=element_text(size=14),axis.title=element_text(size=14,face="bold"))
+g.st <- g + facet_grid(cols = vars(Gene))
+g.st
+```
+
+```{r , fig.width=10, fig.height=4}
+CP.expr.imp.melt$`Culture type` <- gsub("erent",".",CP.expr.imp.melt$`Culture type`)
+CP.expr.imp.melt$`Culture type` <- gsub("ension",".",CP.expr.imp.melt$`Culture type`)
+
+my.comparisons <- list(c("Adh.","Semi-adh."),
+                       c("Adh.","Susp."),
+                       c("Semi-adh.","Susp."))
+g <- ggplot(CP.expr.imp.melt, aes(x=`Culture type`, y=LFQ, fill=`Culture type`))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("Z-score")+xlab("Culture type")+  scale_fill_manual(values = c("#23b866", "#ef5675", "#7a5195"))+
+  stat_compare_means(comparisons = my.comparisons, method = "t.test")+ theme_bw()+
+  theme(strip.text = element_text(size = 14),axis.text=element_text(size=14),axis.title=element_text(size=14,face="bold"))
+g.ct <- g + facet_grid(cols = vars(Gene))
+g.ct
+```
+
+```{r , fig.width=10, fig.height=4}
+CP.expr.imp.melt$`Cell line origin` <- gsub("lung","Lung",CP.expr.imp.melt$`Cell line origin`)
+CP.expr.imp.melt$`Cell line origin` <- gsub("pleural.effusion","Pleural\neffusion",CP.expr.imp.melt$`Cell line origin`)
+CP.expr.imp.melt$`Cell line origin` <- gsub("metastatic","Metastatic",CP.expr.imp.melt$`Cell line origin`)
+
+
+CP.expr.imp.melt$`Cell line origin` <- factor(CP.expr.imp.melt$`Cell line origin`, levels=c(
+  "Lung", "Pleural\neffusion","Metastatic"
+))
+my.comparisons <- list(c("Lung","Pleural\neffusion"),c("Lung","Metastatic"), c("Pleural\neffusion", "Metastatic"))
+
+
+g <- ggplot(CP.expr.imp.melt, aes(x=`Cell line origin`, y=LFQ, fill=`Cell line origin`))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("Z-score")+xlab("Origin")+  scale_fill_manual(values = c("#3f8098", "lightblue", "#ffc3a0"))+
+  stat_compare_means(comparisons = my.comparisons, method = "t.test")+ theme_bw()+
+  theme(strip.text = element_text(size = 14),axis.text=element_text(size=14),axis.title=element_text(size=14,face="bold"))
+g.o <- g + facet_grid(cols = vars(Gene))
+g.o
+```
+
+
+```{r , fig.width=10, fig.height=4}
+CP.expr.imp.melt2 <- CP.expr.imp.melt[CP.expr.imp.melt$Chemo !="",]
+CP.expr.imp.melt2$Chemo <- gsub("chemo-naive","Chemo-naive",CP.expr.imp.melt2$Chemo)
+CP.expr.imp.melt2$Chemo <- gsub("post-chemo","Post-chemo",CP.expr.imp.melt2$Chemo)
+
+CP.expr.imp.melt2$Chemo <- factor(CP.expr.imp.melt2$Chemo, levels=c(
+  "Chemo-naive", "Post-chemo"
+))
+my.comparisons <- list(c("Chemo-naive","Post-chemo"))
+
+g <- ggplot(CP.expr.imp.melt2, aes(x=Chemo, y=LFQ, fill=Chemo))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("Z-score")+xlab("Chemo")+  scale_fill_manual(values = c("white", "brown"))+
+  stat_compare_means(comparisons = my.comparisons, method = "t.test")+ theme_bw()+
+  theme(strip.text = element_text(size = 14),axis.text=element_text(size=14),axis.title=element_text(size=14,face="bold"))
+g.ch <- g + facet_grid(cols = vars(Gene))
+g.ch
+```
+
+
+
+```{r , fig.width=8, fig.height=13}
+top_row <- plot_grid(g.st+theme(legend.position = "none"),
+                     ncol = 1,
+                     labels = c('a'),
+                     label_fontfamily = '',
+                     label_fontface = 'bold',
+                     label_size = 16,
+                     align = 'h',
+                     rel_widths = c(1))
+
+med_row <- plot_grid(g.o+theme(legend.position = "none"),
+                     ncol = 1,
+                     labels = c('b'),
+                     label_fontfamily = '',
+                     label_fontface = 'bold',
+                     label_size = 16,
+                     align = 'h',
+                     rel_widths = c(1))
+
+med_row2 <- plot_grid(g.ch+theme(legend.position = "none"),
+                     ncol = 1,
+                     labels = c('c'),
+                     label_fontfamily = '',
+                     label_fontface = 'bold',
+                     label_size = 16,
+                     align = 'h',
+                     rel_widths = c(1))
+
+bottom_row <- plot_grid(g.ct+theme(legend.position = "none"),
+                        ncol = 1,
+                        labels = c('d'),
+                        label_fontfamily = '',
+                        label_fontface = 'bold',
+                        label_size = 16,
+                        align = 'h',
+                        rel_widths = c(1, 1))
+
+p.grid <- plot_grid(top_row, med_row, med_row2, bottom_row, ncol = 1,
+          rel_heights = c(1,1,1,1))
+p.grid
+
+#ggsave(p.grid, file="Figures/MYC_MYCL_NFIB.png")
+```
+
+
+
+## Heatmap
+
+```{r , fig.width=12, fig.height=5}
+column.ha = HeatmapAnnotation(df =Annot.extended[,c("Subtype", "Culture type","Cell line origin","Chemo" 
+                                                    )],
+                              which="col",
+                              col=colorlist,
+                              annotation_name_side = "right",
+                              gp = gpar(col = "grey"),
+                              gap = unit(c(1,1,1), 'mm'),
+                              show_legend = TRUE,
+                              show_annotation_name = TRUE)
+set.seed(12345)
+ht = Heatmap(#t(scale(t(CP.expr.RB1.TP53))),
+  CP.expr[c("P01106","P12524","O00712"),],
+  name="LFQ value",
+  #col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+  cluster_rows = T, top_annotation = column.ha, 
+  column_labels =  Annot.extended$Sample,
+  cluster_columns = T,
+  clustering_method_columns = "complete",
+  clustering_method_rows = "complete",
+  show_row_dend = F,
+  show_row_names = T,
+  row_labels = c("MYC","MYCL", "NFIB"),
+  column_gap = unit(0.1, "cm"),
+  column_names_gp = gpar(fontsize = 12),
+  gap = unit(0.1, "cm"),
+  show_heatmap_legend = T,
+  show_column_names = T,
+  height = unit(1.875, "cm"),
+  heatmap_width = unit(11, "cm"))
+draw(ht, annotation_legend_side="bottom",
+          heatmap_legend_side="left")
+```
+
+
+```{r }
+pdf(file="Figures/MYC_NFIB.pdf",width = 12, height = 5)
+draw(ht, annotation_legend_side="bottom",
+          heatmap_legend_side="left")
+dev.off()
+```
+
+
+# SLFN11 and TREX1
+
+
+```{r }
+CCLE.normalized <- read_in_with_rowname("Files/CCLE_expression_normalized",F) 
+CCLE.info <- read_in_with_rowname("Files/CCLE_rowname_to_geneID",F)
+CCLE.info <- CCLE.info[CCLE.info$hgnc_symbol %in% c("SLFN11","TREX1"),]
+colnames(CCLE.info)[2] <- "Gene"
+Annot.CCLE <- read_in_with_rowname("Files/CCLE_annotation",F)
+Annot.CCLE$Sample <- Annot.CCLE$CCLE_ID
+Annot.CCLE$Subtype <- Annot.CCLE$`Subtype assignment`
+
+CCLE.normalized.melt <- melt(t(scale(t(CCLE.normalized))))
+colnames(CCLE.normalized.melt) <- c("Row.name","Sample", "Z-score")
+CCLE.normalized.melt <- merge(CCLE.normalized.melt, CCLE.info, by="Row.name")
+CCLE.normalized.melt <- merge(CCLE.normalized.melt, Annot.CCLE, by="Sample")
+CCLE.normalized.melt$Study <- "CCLE"
+
+```
+
+
+
+```{r }
+CP.expr.imp.melt <- melt(t(scale(t(CP.expr.imp))))
+colnames(CP.expr.imp.melt) <- c("Protein","Sample", "Z-score")
+CP.expr.imp.melt <- CP.expr.imp.melt[CP.expr.imp.melt$Protein %in% c("Q7Z7L1","Q9NSU2"),]
+
+CP.expr.imp.melt <-merge(CP.expr.imp.melt, Annot.NE.EMT, by="Sample")
+
+CP.expr.imp.melt$Gene <- ifelse(CP.expr.imp.melt$Protein=="Q7Z7L1", "SLFN11", CP.expr.imp.melt$Protein)
+CP.expr.imp.melt$Gene <- ifelse(CP.expr.imp.melt$Protein=="Q9NSU2", "TREX1", CP.expr.imp.melt$Gene)
+CP.expr.imp.melt$Study <- "Proteomics"
+
+
+Both.melt <- rbind(CCLE.normalized.melt[,c("Gene", "Sample", "Z-score", "Subtype","Study")],
+                   CP.expr.imp.melt[,c("Gene", "Sample", "Z-score", "Subtype", "Study")])
+Both.melt$Subtype <- gsub("SCLC-","",Both.melt$Subtype)
+
+```
+
+```{r , fig.width=7, fig.height=7}
+my.comparisons <- list( c("N", "A"),c("P", "A"), c("N", "P"), c("Y", "A"), c("Y", "N"), c("Y", "P") )
+
+g <- ggplot(Both.melt, aes(x=Subtype, y=`Z-score`, fill=Subtype))+ theme_bw()+# +geom_violin()  
+   geom_boxplot() + ylab("Z-score")+xlab("Subtype")+  scale_fill_manual(values = c("#0000FE", "#21FE06","gold", "#FB02FE"))+
+  stat_compare_means(comparisons = my.comparisons, method = "t.test")+ theme_bw()
+g + facet_grid(cols = vars(Study), rows = vars(Gene),scales = "free_x")+ 
+       theme(strip.text = element_text(size = 14),axis.text=element_text(size=14),axis.title=element_text(size=14,face="bold"))
+ggsave(file="Figures/SLFN11_TREX1.png")
+```
+
+
+# Known subtype markers
+
+```{r }
+Markers <- as.data.frame(read_xlsx("Files/SCLC_markers_literature.xlsx"))
+Markers <- Markers[Markers$Identified =="Yes",]
+Markers <- Markers[!is.na(Markers$Gene),]
+
+Gene.direction.summary <- data.frame(Gene = unique(Markers$Gene),
+                                     Direction = NA)
+
+for (i in 1:nrow(Gene.direction.summary)){
+  Gene.direction.summary$Direction[i] <- paste(Markers[Markers$Gene == Gene.direction.summary$Gene[i],"Literature"], collapse=", ")
+}
+
+Gene.direction.summary <- merge(Gene.direction.summary, prot.to.gene, by="Gene")
+
+```
+
+
+
+
+
+```{r }
+
+Markers.melt <- CP.expr[Gene.direction.summary$Protein,]
+Markers.melt$Gene <- Gene.direction.summary$Gene
+Markers.melt$Protein <- Gene.direction.summary$Protein
+
+Markers.melt <-   reshape2::melt(Markers.melt)
+
+colnames(Markers.melt)[3:4] <- c("Sample", "LFQ.value")
+
+Markers.melt <- merge(Markers.melt, Annot[,c("Sample","Subtype")], by="Sample")
+Markers.melt$Subtype <- unlist(lapply(Markers.melt$Subtype, function(x){strsplit(x, split="-")[[1]][2]}))
+Markers.melt <- merge(Markers.melt, Gene.direction.summary[,c("Gene","Direction")])
+
+
+gene.order <- c(Gene.direction.summary[Gene.direction.summary$Direction =="UP in A","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="DOWN in A","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in N","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="DOWN in N","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in P","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="DOWN in P","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in Y","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="DOWN in Y","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in A, DOWN in N, UP in P","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in A, DOWN in P","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in A, UP in N, DOWN in P, DOWN in Y","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in A, UP in N","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in A, DOWN in N, DOWN in P","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="DOWN in A, UP in N, UP in P, DOWN in Y","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in N, UP in P, UP in Y","Gene"],
+                Gene.direction.summary[Gene.direction.summary$Direction =="UP in P, UP in Y","Gene"])
+
+row.names(Gene.direction.summary) <- Gene.direction.summary$Gene
+
+Gene.direction.summary <- Gene.direction.summary[gene.order,]
+
+Markers.melt$Gene <- factor(Markers.melt$Gene, levels = gene.order)
+
+unique(Gene.direction.summary$Direction)
+
+Gene.direction.summary$Direction <- ifelse(Gene.direction.summary$Direction == "UP in A, DOWN in N, UP in P", "UP in A&P, DOWN in N", Gene.direction.summary$Direction)
+Gene.direction.summary$Direction <- ifelse(Gene.direction.summary$Direction == "UP in A, UP in N, DOWN in P, DOWN in Y", "UP in A&N, DOWN in P&Y",
+                                 Gene.direction.summary$Direction)
+Gene.direction.summary$Direction <- ifelse(Gene.direction.summary$Direction == "UP in A, UP in N", "UP in A&N",
+                                 Gene.direction.summary$Direction)
+Gene.direction.summary$Direction <- ifelse(Gene.direction.summary$Direction == "UP in A, DOWN in N, DOWN in P", "UP in A, DOWN in N&P",
+                                 Gene.direction.summary$Direction)
+Gene.direction.summary$Direction <- ifelse(Gene.direction.summary$Direction == "DOWN in A, UP in N, UP in P, DOWN in Y", "UP in N&P, DOWN in A&Y",
+                                 Gene.direction.summary$Direction)
+Gene.direction.summary$Direction <- ifelse(Gene.direction.summary$Direction == "UP in N, UP in P, UP in Y", "UP in N&P&Y",
+                                 Gene.direction.summary$Direction)
+Gene.direction.summary$Direction <- ifelse(Gene.direction.summary$Direction == "UP in P, UP in Y", "UP in P&Y",
+                                 Gene.direction.summary$Direction)
+
+
+unique(Gene.direction.summary$Direction)
+
+
+```
+
+
+
+
+
+```{r , fig.width=15, fig.height=40}
+my_comparisons <- list( c("N", "A"),c("P", "A"), c("N", "P"), c("Y", "A"), c("Y", "N"), c("Y", "P") )
+names.my_comparisons <- c("NA", "PA", "NP", "YA", "YN", "YP")
+
+glist <- list()
+
+for (i in 1:length(Gene.direction.summary$Gene)){
+  
+  direct <- Gene.direction.summary$Direction[i]
+  if (direct %in% c("UP in A","DOWN in A")){
+    comps <- my_comparisons[grep("A", names.my_comparisons)]
+  } else if (direct %in% c("UP in N")){
+    comps <- my_comparisons[grep("N", names.my_comparisons)]
+  } else if (direct %in% c("UP in P","DOWN in P")){
+    comps <- my_comparisons[grep("P", names.my_comparisons)]
+  } else if (direct %in% c("UP in Y")){
+    comps <- my_comparisons[grep("Y", names.my_comparisons)]
+  } else {
+    comps <- my_comparisons
+  } 
+  
+
+  g <- ggplot(Markers.melt[Markers.melt$Gene ==Gene.direction.summary$Gene[i],], 
+              aes(x=Subtype, y=LFQ.value, fill=Subtype))+ theme_bw()+# +geom_violin()  
+    scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+    scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+    geom_boxplot() + ylab("LFQ value")+xlab("")+
+    geom_point()+ ggtitle(Gene.direction.summary$Gene[i], 
+                          subtitle = paste0("Exp.Dir.: ", Gene.direction.summary$Direction[i]))+
+  theme(legend.position="none")+ 
+    theme(plot.title = element_text(size = 10),
+          plot.subtitle = element_text(size = 8))+
+    stat_compare_means(label = "p.signif", method = "anova")+
+    stat_compare_means(comparisons = comps,label = "p.signif", method = "t.test")
+  glist[[i]] <- g
+}
+
+g <- grid.arrange(grobs=glist, ncol=6)
+
+```
+
+
+
+
+
+```{r }
+best.markers <- c("CHGA", "DLL3", "SOX2", "NOTCH1", 
+                  "ANTXR1", 
+                  "ASCL2", "AVIL", "CHAT", 
+                  "IGF1R", "TRPM5", 
+                  "ITGA1","ITGA3", "ITGA5", "ITGAV", "ITGB1",
+                   "CDH1", "IGFBP5","INSM1")
+```
+
+
+
+
+```{r , fig.width=15, fig.height=10}
+glist <- list()
+
+for (i in 1:length(best.markers)){
+  gene <- best.markers[i]
+  direct <- Gene.direction.summary[Gene.direction.summary$Gene==gene,"Direction"]
+  if (direct %in% c("UP in A","DOWN in A")){
+    comps <- my_comparisons[grep("A", names.my_comparisons)]
+  } else if (direct %in% c("UP in N")){
+    comps <- my_comparisons[grep("N", names.my_comparisons)]
+  } else if (direct %in% c("UP in P","DOWN in P")){
+    comps <- my_comparisons[grep("P", names.my_comparisons)]
+  } else if (direct %in% c("UP in Y")){
+    comps <- my_comparisons[grep("Y", names.my_comparisons)]
+  } else {
+    comps <- my_comparisons
+  } 
+  
+
+  g <- ggplot(Markers.melt[Markers.melt$Gene ==gene,], 
+              aes(x=Subtype, y=LFQ.value, fill=Subtype))+ theme_bw()+# +geom_violin()  
+    scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+    scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+    geom_boxplot() + ylab("LFQ value")+xlab("")+
+    geom_point()+ ggtitle(gene, 
+                          subtitle = paste0(direct))+
+  theme(legend.position="none")+ 
+    theme(plot.title = element_text(size = 12),
+          plot.subtitle = element_text(size = 10))+
+    #stat_compare_means(label = "p.signif", method = "anova")+
+    stat_compare_means(comparisons = comps,label = "p.signif", method = "t.test",na.rm = T)
+  glist[[i]] <- g
+}
+
+g <- grid.arrange(grobs=glist, ncol=6)
+
+#g
+ggsave(file="Figures/Subtype_markers_literature.pdf", g, height = 10, width = 15)
+ggsave(file="Figures/Subtype_markers_literature.svg", g, height = 10, width = 15)
+
+```

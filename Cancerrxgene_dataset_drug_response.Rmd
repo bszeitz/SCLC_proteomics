@@ -1,0 +1,516 @@
+---
+title: "Cancerrxgene drug response dataset"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+# Load packages, functions and files
+
+```{r }
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+Read in and clean sample info:
+
+```{r }
+Cancerrxgene.Annot <- read.xlsx("Files/cancerrxgene/Cell_Lines_Details.xlsx",1)
+Cancerrxgene.Annot <- Cancerrxgene.Annot[Cancerrxgene.Annot$GDSC.Tissue.descriptor.2 =="lung_small_cell_carcinoma" &
+                                           !is.na(Cancerrxgene.Annot$GDSC.Tissue.descriptor.2),]
+```
+
+## Search for commonly present cell lines in our study and Cancerrxgene:
+
+```{r }
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+
+Annot$Sample.Name <- Annot$Sample
+
+Annot$Sample.Name <- ifelse(startsWith(Annot$Sample.Name,"H"), paste("NCI",Annot$Sample.Name,sep="-"), Annot$Sample.Name)
+Annot$Sample.Name <- ifelse(Annot$Sample.Name =="CRL2177", "SW1271", Annot$Sample.Name)
+Annot$Sample.Name <- ifelse(Annot$Sample.Name =="CRL2066", "DMS114", Annot$Sample.Name)
+Annot$Sample.Name <- ifelse(Annot$Sample.Name =="DMS53", "DMS-53", Annot$Sample.Name)
+Annot$Sample.Name <- ifelse(Annot$Sample.Name =="DMS153", "DMS-153", Annot$Sample.Name)
+Annot$Sample.Name <- ifelse(Annot$Sample.Name =="DMS114", "DMS-114", Annot$Sample.Name)
+Annot$Sample.Name <- ifelse(Annot$Sample.Name =="SHP77", "SHP-77", Annot$Sample.Name)
+Annot$Sample.Name <- ifelse(Annot$Sample.Name =="CORL311", "COR-L311", Annot$Sample.Name)
+
+Annot$Sample.Name[!Annot$Sample.Name %in% Cancerrxgene.Annot$Sample.Name]
+
+Cancerrxgene.Annot.common <- Cancerrxgene.Annot[Cancerrxgene.Annot$Sample.Name %in% Annot$Sample.Name,]
+
+for (i in 1:nrow(Cancerrxgene.Annot.common)){
+  Cancerrxgene.Annot.common$Sample[i] <- Annot[Annot$Sample.Name == Cancerrxgene.Annot.common$Sample.Name[i],"Sample"]
+}
+
+Annot.common <- Annot[Annot$Sample.Name %in% Cancerrxgene.Annot.common$Sample.Name,]
+
+Annot[!Annot$Sample %in% Annot.common$Sample,]
+
+```
+
+6 of our cell lines were not included in the cancerrxgene database: GLC4 (A), HLHE (Y), DMS153 (A), H1882 (A), N417 (N), H372 (Y)
+
+
+
+## Search for commonly present cell lines in CCLE transcriptomics and Cancerrxgene:
+
+
+```{r }
+CCLE.Annot <- read_in_with_rowname("Files/CCLE_annotation",F)
+
+Cancerrxgene.Annot$Sample.Name.CCLE <- gsub("-","",Cancerrxgene.Annot$Sample.Name)
+Cancerrxgene.Annot$Sample.Name.CCLE
+CCLE.Annot$Common.Name[!CCLE.Annot$Common.Name %in%Cancerrxgene.Annot$Sample.Name.CCLE]
+
+Annot.common.CCLE <- CCLE.Annot[CCLE.Annot$Common.Name %in% Cancerrxgene.Annot$Sample.Name.CCLE,]
+
+Cancerrxgene.Annot.common <- Cancerrxgene.Annot[Cancerrxgene.Annot$Sample.Name.CCLE %in% Annot.common.CCLE$Common.Name,]
+
+Cancerrxgene.Annot.common$Subtype <- ""
+
+for (i in 1:nrow(Cancerrxgene.Annot.common)){
+  Cancerrxgene.Annot.common$Sample[i] <- Annot.common.CCLE[Annot.common.CCLE$Common.Name == Cancerrxgene.Annot.common$Sample.Name.CCLE[i],
+                                                           "Common.Name"]
+  Cancerrxgene.Annot.common$Subtype[i] <- Annot.common.CCLE[Annot.common.CCLE$Common.Name == Cancerrxgene.Annot.common$Sample.Name.CCLE[i],
+                                                           "Subtype assignment"]
+}
+
+
+row.names(Cancerrxgene.Annot.common) <- Cancerrxgene.Annot.common$Sample
+
+```
+38 of the CCLE cell lines (also categorized into subtypes) were included in the cancerrxgene database:
+
+ [1] "COLO668"  "CORL279"  "CORL311"  "CORL88"   "DMS114"   "DMS273"   "DMS53"    "NCIH1048" "NCIH1092" "NCIH1105" "NCIH1341" "NCIH1436" "NCIH146" 
+[14] "NCIH1694" "NCIH1836" "NCIH1876" "NCIH196"  "NCIH1963" "NCIH2029" "NCIH2066" "NCIH209"  "NCIH211"  "NCIH2196" "NCIH2227" "NCIH446"  "NCIH524" 
+[27] "NCIH526"  "NCIH69"   "NCIH82"   "NCIH841"  "SBC5"     "DMS79"    "CORL95"   "HCC33"    "NCIH2081" "NCIH2171" "SHP77"    "SW1271" 
+
+
+
+## Read in and clean drug response table:
+
+
+```{r }
+GDSC <- rbind(read.xlsx("Files/cancerrxgene/GDSC1_fitted_dose_response_25Feb20.xlsx",1),
+              read.xlsx("Files/cancerrxgene/GDSC2_fitted_dose_response_25Feb20.xlsx",1))
+GDSC.SCLC <- GDSC[GDSC$COSMIC_ID %in% Cancerrxgene.Annot.common$COSMIC.identifier,]
+GDSC.SCLC$PATHWAY_NAME <- trimws(GDSC.SCLC$PATHWAY_NAME)
+GDSC.SCLC$PUTATIVE_TARGET <- ifelse(GDSC.SCLC$PUTATIVE_TARGET == "FGRF1, FGFR2, FGFR3", 
+                                           "FGFR1, FGFR2, FGFR3", GDSC.SCLC$PUTATIVE_TARGET)
+GDSC.SCLC.Annot <- unique(GDSC.SCLC[,c("DATASET","DRUG_NAME", "PUTATIVE_TARGET", "PATHWAY_NAME")])
+dupl.drugs <- GDSC.SCLC.Annot$DRUG_NAME[duplicated(GDSC.SCLC.Annot$DRUG_NAME)]
+Cancerrxgene.Annot.common$CELL_LINE_NAME <- Cancerrxgene.Annot.common$Sample.Name
+
+
+GDSC.SCLC.Resp.long <- merge(GDSC.SCLC[,c("DATASET","DRUG_NAME", "CELL_LINE_NAME", "LN_IC50")],
+                        Cancerrxgene.Annot.common[,c("CELL_LINE_NAME","Sample","Subtype")], by="CELL_LINE_NAME")
+
+```
+
+
+
+Generate wide format for drug response data (H378 does not have any data, therefore it was removed):
+
+
+```{r }
+GDSC1.drugs <- unique(GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DATASET=="GDSC1","DRUG_NAME"])
+GDSC1.samples <- unique(GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DATASET=="GDSC1","Sample"])
+GDSC1.samples <- GDSC1.samples[GDSC1.samples!="H378"]
+GDSC1.SCLC.Resp <- matrix(nrow=length(GDSC1.samples), ncol=length(GDSC1.drugs))
+colnames(GDSC1.SCLC.Resp) <- GDSC1.drugs
+row.names(GDSC1.SCLC.Resp) <- GDSC1.samples
+
+for (i in 1:nrow(GDSC1.SCLC.Resp)){
+  for (j in 1:ncol(GDSC1.SCLC.Resp)){
+    ic50 <- GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DATASET == "GDSC1" &
+                                                  GDSC.SCLC.Resp.long$DRUG_NAME == colnames(GDSC1.SCLC.Resp)[j] &
+                                                  GDSC.SCLC.Resp.long$Sample == row.names(GDSC1.SCLC.Resp)[i],"LN_IC50"]
+    GDSC1.SCLC.Resp[i,j] <- ifelse(isEmpty(ic50), NA, ic50)
+  }
+}
+
+
+GDSC2.drugs <- unique(GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DATASET=="GDSC2","DRUG_NAME"])
+GDSC2.samples <- unique(GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DATASET=="GDSC2","Sample"])
+GDSC2.SCLC.Resp <- matrix(nrow=length(GDSC2.samples), ncol=length(GDSC2.drugs))
+colnames(GDSC2.SCLC.Resp) <- GDSC2.drugs
+row.names(GDSC2.SCLC.Resp) <- GDSC2.samples
+
+for (i in 1:nrow(GDSC2.SCLC.Resp)){
+  for (j in 1:ncol(GDSC2.SCLC.Resp)){
+    ic50 <- GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DATASET == "GDSC2" &
+                                                  GDSC.SCLC.Resp.long$DRUG_NAME == colnames(GDSC2.SCLC.Resp)[j] &
+                                                  GDSC.SCLC.Resp.long$Sample == row.names(GDSC2.SCLC.Resp)[i],"LN_IC50"]
+    GDSC2.SCLC.Resp[i,j] <- ifelse(isEmpty(ic50), NA, ic50)
+  }
+}
+
+```
+
+
+### Filter for drugs with enough data:
+
+
+```{r }
+GDSC1.SCLC.Resp.F <- as.data.frame(filter_missingvalues(t(GDSC1.SCLC.Resp), 50))
+GDSC2.SCLC.Resp.F <- as.data.frame(filter_missingvalues(t(GDSC2.SCLC.Resp), 50))
+```
+
+
+### Check for normality:
+
+
+```{r }
+Norm.test.res.GDSC1 <- SW_normality_test(GDSC1.SCLC.Resp.F)
+hist(Norm.test.res.GDSC1$Shapiro.Wilk.pv)
+Norm.test.res.GDSC2 <- SW_normality_test(GDSC2.SCLC.Resp.F)
+hist(Norm.test.res.GDSC2$Shapiro.Wilk.pv)
+```
+
+
+# Visualize MAPK-targeting drugs
+
+```{r , fig.width=15, fig.height=15}
+MAPKs <- GDSC.SCLC.Annot[GDSC.SCLC.Annot$PATHWAY_NAME =="ERK MAPK signaling","DRUG_NAME"]
+
+GDSC.SCLC.Resp.long <- merge(GDSC.SCLC[,c("DATASET","DRUG_NAME", "CELL_LINE_NAME", "LN_IC50")],
+                        Cancerrxgene.Annot.common[,c("CELL_LINE_NAME","Sample","Subtype")], by="CELL_LINE_NAME")
+
+GDSC.SCLC.Resp.long <- GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DRUG_NAME %in% MAPKs,]
+
+GDSC.SCLC.Resp.long$Drug_Data <- paste(GDSC.SCLC.Resp.long$DRUG_NAME, 
+                                       GDSC.SCLC.Resp.long$DATASET, sep="_")
+
+GDSC.SCLC.Resp.long$subtype <- gsub("SCLC-","",GDSC.SCLC.Resp.long$Subtype)
+
+
+GDSC.SCLC.Resp.long$Drug_info <- ""
+for (i in 1:nrow(GDSC.SCLC.Resp.long)){
+  GDSC.SCLC.Resp.long$Drug_info[i] <- paste0("",GDSC.SCLC.Resp.long$DRUG_NAME[i],
+                                             "\nDataset: ", GDSC.SCLC.Resp.long$DATASET[i],
+                                             "\nTarget: ",
+                                                 GDSC.SCLC.Annot[GDSC.SCLC.Annot$DATASET == GDSC.SCLC.Resp.long$DATASET[i] &
+                                                             GDSC.SCLC.Annot$DRUG_NAME == GDSC.SCLC.Resp.long$DRUG_NAME[i],
+                                                           c("PUTATIVE_TARGET")])
+}
+
+my.comparisons <- list(c("A","N"),c("A","P"),c("A","Y"),c("N","P"),c("N","Y"),c("P","Y"))
+
+
+g <- ggplot(GDSC.SCLC.Resp.long, aes(x=subtype, y=LN_IC50, fill=subtype))+ theme_classic()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+# geom_beeswarm()+
+  #geom_violin(alpha=0.5) + 
+  geom_boxplot()+
+  ylab("LN_IC50")+xlab("")+
+  #stat_compare_means(label = "p.signif")+ 
+  #stat_compare_means(comparisons = my.comparisons)+
+  theme(legend.position="none", strip.text = element_text(size=15), axis.text=element_text(size=15))
+g2 <- g+ facet_wrap(Drug_info ~ ., ncol=5, scales = "free")
+g2
+#ggsave(file="Figures/Cancerrxgene_MAPK_targeting.png", g2)
+
+
+```
+
+# Visualize drugs that target subtype-specific proteins
+
+## Results for CCLE cell lines (n = 38)
+
+Version 1 (boxplots + violinplots)
+
+```{r , fig.width=12, fig.height=10}
+table2.drugs <- c("Dasatinib","Vorinostat","Imatinib","Pazopanib","Sorafenib", "Sunitinib","Tivozanib")
+
+GDSC.SCLC.Resp.long <- merge(GDSC.SCLC[,c("DATASET","DRUG_NAME", "CELL_LINE_NAME", "LN_IC50")],
+                        Cancerrxgene.Annot.common[,c("CELL_LINE_NAME","Sample","Subtype")], by="CELL_LINE_NAME")
+
+GDSC.SCLC.Resp.long <- GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DRUG_NAME %in% table2.drugs,]
+
+GDSC.SCLC.Resp.long$Drug_Data <- paste(GDSC.SCLC.Resp.long$DRUG_NAME, 
+                                       GDSC.SCLC.Resp.long$DATASET, sep="_")
+
+GDSC.SCLC.Resp.long$subtype <- gsub("SCLC-","",GDSC.SCLC.Resp.long$Subtype)
+
+
+GDSC.SCLC.Resp.long$Drug_info <- ""
+for (i in 1:nrow(GDSC.SCLC.Resp.long)){
+  GDSC.SCLC.Resp.long$Drug_info[i] <- paste0("",GDSC.SCLC.Resp.long$DRUG_NAME[i],
+                                             "\nDataset: ", GDSC.SCLC.Resp.long$DATASET[i])#,
+                                             #"\nTarget: ",
+                                             #    GDSC.SCLC.Annot[GDSC.SCLC.Annot$DATASET == GDSC.SCLC.Resp.long$DATASET[i] &
+                                             #                GDSC.SCLC.Annot$DRUG_NAME == GDSC.SCLC.Resp.long$DRUG_NAME[i],
+                                             #              c("PUTATIVE_TARGET")])#,"\nPathway: ",
+                                                 #GDSC.SCLC.Annot[GDSC.SCLC.Annot$DATASET == GDSC.SCLC.Resp.long$DATASET[i] &
+                                                 #            GDSC.SCLC.Annot$DRUG_NAME == GDSC.SCLC.Resp.long$DRUG_NAME[i],
+                                                 #          c("PATHWAY_NAME")])
+}
+
+my.comparisons <- list(c("A","N"),c("A","P"),c("A","Y"),c("N","P"),c("N","Y"),c("P","Y"))
+
+
+g <- ggplot(GDSC.SCLC.Resp.long, aes(x=subtype, y=LN_IC50, fill=subtype))+ theme_classic()+
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+
+  ylab("LN_IC50")+xlab("")+geom_beeswarm()+
+  geom_violin(alpha=0.5) + 
+  geom_boxplot(alpha=0.2)+
+  ylab("Log(IC50)")+xlab("")+
+  #stat_compare_means(size = 2.5)+
+  theme(legend.position="none")+
+  stat_compare_means(comparisons = my.comparisons,size = 3.5)+
+  theme(legend.position="none", strip.text = element_text(size=15), axis.text=element_text(size=15))
+g2 <- g+ facet_wrap(Drug_info ~ ., ncol=4, scales = "free")
+g2
+#ggsave(file="Figures/Cancerrxgene_Table2_drugs.png", g2)
+
+
+```
+
+
+Version 2 (boxplots)
+
+
+```{r , fig.width=12, fig.height=10}
+
+g <- ggplot(GDSC.SCLC.Resp.long, aes(x=subtype, y=LN_IC50, fill=subtype))+ theme_bw()+
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+
+  ylab("LN_IC50")+xlab("")+geom_beeswarm()+
+  geom_boxplot(alpha=0.9)+
+  ylab("Log(IC50)")+xlab("")+
+  theme(legend.position="none")+
+  #stat_compare_means(comparisons = my_comparisons,size = 3.5)+
+  theme(legend.position="none", strip.text = element_text(size=15), axis.text=element_text(size=15))
+g2 <- g+ facet_wrap(Drug_info ~ ., ncol=4, scales = "free")
+g2
+#ggsave(file="Figures/Cancerrxgene_Table2_drugs.pdf", g2)
+
+
+```
+
+Version 3 (barplots):
+
+```{r , fig.width=10, fig.height=3}
+#drug <- "Dasatinib"
+#db <- "GDSC1"
+show_barplot <- function(drug, db){
+  Res <- data.frame(Drug = drug,
+                    Dataset = db,
+                    Subtype = c("A","N","P","Y"),
+                    Color = c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"),
+                    Mean = NA,
+                    SD = NA)
+  
+  Resp.tab <-GDSC.SCLC.Resp.long[GDSC.SCLC.Resp.long$DRUG_NAME==drug &
+                                   GDSC.SCLC.Resp.long$DATASET==db,]
+  
+  Res$Mean[1] <- mean(Resp.tab[Resp.tab$subtype =="A","LN_IC50"], na.rm=T)
+  Res$SD[1] <- sd(Resp.tab[Resp.tab$subtype =="A","LN_IC50"], na.rm=T)
+  
+  Res$Mean[2] <- mean(Resp.tab[Resp.tab$subtype =="N","LN_IC50"], na.rm=T)
+  Res$SD[2] <- sd(Resp.tab[Resp.tab$subtype =="N","LN_IC50"], na.rm=T)
+  
+  Res$Mean[3] <- mean(Resp.tab[Resp.tab$subtype =="P","LN_IC50"], na.rm=T)
+  Res$SD[3] <- sd(Resp.tab[Resp.tab$subtype =="P","LN_IC50"], na.rm=T)
+  
+  Res$Mean[4] <- mean(Resp.tab[Resp.tab$subtype =="Y","LN_IC50"], na.rm=T)
+  Res$SD[4] <- sd(Resp.tab[Resp.tab$subtype =="Y","LN_IC50"], na.rm=T)
+  
+  Res[is.na(Res)] <- 0
+  
+  Res <- Res[order(Res$Mean, decreasing = T),]
+  Res$Subtype <- factor(Res$Subtype, levels = Res$Subtype)
+  
+  g <- ggplot(Res, aes(x=Subtype, y=Mean, fill=Subtype)) + 
+    geom_bar(position=position_dodge(), stat="identity") +
+    scale_color_manual(values=Res$Color)+ 
+  scale_fill_manual(values=Res$Color)+
+    geom_errorbar(aes(ymin=Mean-SD, ymax=Mean+SD),
+                  width=.2,     
+                  position=position_dodge(.9))+ coord_flip()+theme_classic()+
+    theme(legend.position="none", strip.text = element_text(size=15), axis.text=element_text(size=15))+
+    ggtitle(paste0(drug," (",db,")"))
+  return(g)
+  
+}
+
+
+ggarrange(plotlist = list(show_barplot("Dasatinib","GDSC2"),
+                          show_barplot("Pazopanib","GDSC1"),
+                          show_barplot("Vorinostat","GDSC2")), ncol=3)
+
+
+```
+
+
+## Results for our cell lines (n = 18): correlation analysis
+
+Harmonize CCLE and our naming system:
+
+```{r }
+Annot.common$Sample.Name2 <- NA
+for (i in 1:nrow(Annot.common)){
+  Annot.common$Sample.Name2[i] <- unique(Cancerrxgene.Annot[Cancerrxgene.Annot$Sample.Name == Annot.common$Sample.Name[i],
+                                                      "Sample.Name.CCLE"])
+}
+
+GDSC1.SCLC.Resp.F2 <- GDSC1.SCLC.Resp.F[,colnames(GDSC1.SCLC.Resp.F) %in% Annot.common$Sample.Name2]
+for (i in 1:ncol(GDSC1.SCLC.Resp.F2)){
+  colnames(GDSC1.SCLC.Resp.F2)[i] <- Annot.common[Annot.common$Sample.Name2 == colnames(GDSC1.SCLC.Resp.F2)[i],"Sample"]
+}
+row.names(GDSC1.SCLC.Resp.F2) <- paste(row.names(GDSC1.SCLC.Resp.F2),"GDSC1",sep="_")
+
+GDSC2.SCLC.Resp.F2 <- GDSC2.SCLC.Resp.F[,colnames(GDSC2.SCLC.Resp.F) %in% Annot.common$Sample.Name2]
+for (i in 1:ncol(GDSC2.SCLC.Resp.F2)){
+  colnames(GDSC2.SCLC.Resp.F2)[i] <- Annot.common[Annot.common$Sample.Name2 == colnames(GDSC2.SCLC.Resp.F2)[i],"Sample"]
+}
+row.names(GDSC2.SCLC.Resp.F2) <- paste(row.names(GDSC2.SCLC.Resp.F2),"GDSC2",sep="_")
+
+```
+
+
+Merge GDSC1 and GDSC2 data:
+
+```{r }
+gdsc2.missing <- colnames(GDSC1.SCLC.Resp.F2)[!colnames(GDSC1.SCLC.Resp.F2) %in% colnames(GDSC2.SCLC.Resp.F2)]
+GDSC2.SCLC.Resp.F2.missing <- GDSC2.SCLC.Resp.F2[,c(1:length(gdsc2.missing))]
+GDSC2.SCLC.Resp.F2.missing[!is.na(GDSC2.SCLC.Resp.F2.missing)] <- NA
+colnames(GDSC2.SCLC.Resp.F2.missing) <- gdsc2.missing
+GDSC2.SCLC.Resp.F2 <- cbind(GDSC2.SCLC.Resp.F2.missing, GDSC2.SCLC.Resp.F2)
+
+gdsc1.missing <- colnames(GDSC2.SCLC.Resp.F2)[!colnames(GDSC2.SCLC.Resp.F2) %in% colnames(GDSC1.SCLC.Resp.F2)]
+
+gdsc.both <- colnames(GDSC2.SCLC.Resp.F2)
+
+GDSC.SCLC.Resp.F.Both <- rbind(GDSC1.SCLC.Resp.F2[,gdsc.both],
+                               GDSC2.SCLC.Resp.F2[,gdsc.both])
+
+Annot.common.2 <- Annot.common[gdsc.both,]
+```
+
+
+Load CP and CM expression table (because KIT was detected in both):
+
+```{r }
+CP.expr <- read_in_with_rowname("Files/CP_expression_filtered_imputed",F)[,Annot.common.2$Sample]
+CM.expr <- read_in_with_rowname("Files/CM_expression_filtered_imputed",F)[,Annot.common.2$Sample]
+
+Protein.Annot <- read_in_with_rowname("Files/Secreted_surface_plasma_druggable_info",F)
+Protein.Annot$Accession <- Protein.Annot$Protein
+row.names(Protein.Annot) <- Protein.Annot$Protein
+
+interesting.genes <- c("EPHA2","HDAC1","KIT")
+interesting.proteins <- Protein.Annot[Protein.Annot$Gene %in% interesting.genes,]
+
+Prot.Expr <- rbind(CP.expr[interesting.proteins$Protein,],
+                               CM.expr[interesting.proteins[interesting.proteins$Gene=="KIT","Protein"],])
+interesting.proteins$Gene
+row.names(Prot.Expr) <- c("EPHA2","HDAC1", "KIT","KIT_CM")
+
+compare.KIT <- data.frame(CP = as.numeric(Prot.Expr[3,]),
+                CM= as.numeric(Prot.Expr[4,]))
+
+plot(compare.KIT)
+cor.test(compare.KIT[,1], compare.KIT[,2])
+
+Prot.Expr <- Prot.Expr[-4,]
+```
+The KIT protein's expression profile is highly correlated in CP and CM (r = 0.691, p = 0.001) - it is enough to only keep CP data
+
+
+
+Merge protein expressions and drug response data:
+
+```{r }
+
+Prot.Expr.melt <- melt(as.matrix(Prot.Expr))
+colnames(Prot.Expr.melt) <- c("Gene", "Sample", "LFQ")
+
+Prot.Expr.melt <- merge(Prot.Expr.melt, Annot.common.2[,c("Sample", "Subtype")], by="Sample")
+
+GDSC.SCLC.Resp.F.Both.melt <- melt(as.matrix(GDSC.SCLC.Resp.F.Both))
+colnames(GDSC.SCLC.Resp.F.Both.melt) <- c("Drug", "Sample", "LN_IC50")
+
+Expr.IC50.melt <- merge(Prot.Expr.melt,GDSC.SCLC.Resp.F.Both.melt,by="Sample" )
+
+
+GDSC.SCLC.Resp.F.Both.relevant <- GDSC.SCLC.Resp.F.Both[c(grep("Dasatinib",row.names(GDSC.SCLC.Resp.F.Both)),
+                                   grep("Imatinib",row.names(GDSC.SCLC.Resp.F.Both)),
+                                   grep("Pazopanib",row.names(GDSC.SCLC.Resp.F.Both)),
+                                   grep("Sorafenib",row.names(GDSC.SCLC.Resp.F.Both)),
+                                   grep("Sunitib",row.names(GDSC.SCLC.Resp.F.Both)),
+                                   grep("Tivozanib",row.names(GDSC.SCLC.Resp.F.Both)),
+                                   grep("Vorinostat",row.names(GDSC.SCLC.Resp.F.Both))),colnames(Prot.Expr)]
+
+row.names(GDSC.SCLC.Resp.F.Both.relevant)
+
+```
+
+Correlation tests btw protein expression and drug response:
+
+```{r }
+
+cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Dasatinib_GDSC1",]),as.numeric(Prot.Expr["EPHA2",]),method="pearson")
+cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Dasatinib_GDSC2",]),as.numeric(Prot.Expr["EPHA2",]),method="pearson")
+cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Imatinib_GDSC1",]),as.numeric(Prot.Expr["KIT",]),method="pearson")
+cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Pazopanib_GDSC1",]),as.numeric(Prot.Expr["KIT",]),method="pearson")
+cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Sorafenib_GDSC1",]),as.numeric(Prot.Expr["KIT",]),method="pearson")
+cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Sorafenib_GDSC2",]),as.numeric(Prot.Expr["KIT",]),method="pearson")
+cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Tivozanib_GDSC1",]),as.numeric(Prot.Expr["KIT",]),method="pearson")
+cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Vorinostat_GDSC1",]),as.numeric(Prot.Expr["HDAC1",]),method="pearson")
+#cor.test(as.numeric(GDSC.SCLC.Resp.F.Both.relevant["Vorinostat_GDSC2,",]),as.numeric(Prot.Expr["HDAC1",]),method="pearson") # not enough obs
+
+
+```
+
+Export scatterplot for the best performing drugs:
+
+```{r , fig.width=10, fig.height=3}
+g1 <- ggplot(na.omit(Expr.IC50.melt[grepl("Dasatinib_GDSC1",Expr.IC50.melt$Drug) &
+                              Expr.IC50.melt$Gene=="EPHA2",]),
+            aes(x=LFQ, y=LN_IC50))+ theme_classic()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  geom_smooth(method="lm",fill = "lightgrey",color="black") + 
+  geom_point(aes(color=Subtype), size=3)+theme(legend.position="none")+
+  ylab("Dasatinib Log(IC50)")+xlab("EPHA2 protein expression")
+
+
+g2 <- ggplot(na.omit(Expr.IC50.melt[grepl("Pazopanib_GDSC1",Expr.IC50.melt$Drug) &
+                              Expr.IC50.melt$Gene=="KIT",]),
+            aes(x=LFQ, y=LN_IC50))+ theme_classic()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  geom_smooth(method="lm",fill = "lightgrey",color="black") + 
+  geom_point(aes(color=Subtype), size=3)+theme(legend.position="none")+
+  ylab("Pazopanib Log(IC50)")+xlab("KIT protein expression")
+
+
+g3 <- ggplot(na.omit(Expr.IC50.melt[grepl("Vorinostat_GDSC1",Expr.IC50.melt$Drug) &
+                              Expr.IC50.melt$Gene=="HDAC1",]),
+            aes(x=LFQ, y=LN_IC50))+ theme_classic()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  geom_smooth(method="lm",fill = "lightgrey",color="black") + 
+  geom_point(aes(color=Subtype), size=3)+theme(legend.position="none")+
+  ylab("Vorinostat Log(IC50)")+xlab("HDAC1 protein expression")
+
+ggarrange(plotlist = list(g1,g2,g3), ncol=3)
+
+#ggsave(file="Figures/Cancerrxgene_selected_corr.pdf", ggarrange(plotlist = list(g1,g2,g3), ncol=3),
+#       height = 3, width = 10)
+
+```
+
+
+
+
+
+
+
+
+

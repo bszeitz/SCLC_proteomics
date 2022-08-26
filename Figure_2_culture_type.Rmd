@@ -1,0 +1,147 @@
+---
+title: "Figure 2 - Culture type comparisons"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+```{r Load packages}
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+ 
+
+```{r}
+loaded <- load("RData/Fig_DEA_culture_noSPfilt.RData")
+loaded
+
+```
+
+# CP volcano plot
+
+```{r , fig.width=10, fig.height=8}
+
+top5.up <- DE.Susp.vs.Adh.table.CP[DE.Susp.vs.Adh.table.CP$`Log2FC(Susp-Adh)`>0,][1:15, "Accession"]
+top5.dn <- DE.Susp.vs.Adh.table.CP[DE.Susp.vs.Adh.table.CP$`Log2FC(Susp-Adh)`<0,][1:15, "Accession"]
+
+DE.Susp.vs.Adh.table.CP$Label <- ifelse(DE.Susp.vs.Adh.table.CP$Accession %in% c(top5.up, top5.dn) &
+                                          DE.Susp.vs.Adh.table.CP$`p.adj Culture` < 0.05, DE.Susp.vs.Adh.table.CP$Gene, "")
+DE.Susp.vs.Adh.table.CP$Color <- "Not significant"
+DE.Susp.vs.Adh.table.CP$Color <- ifelse(DE.Susp.vs.Adh.table.CP$`Log2FC(Susp-Adh)`>0 & 
+                                          DE.Susp.vs.Adh.table.CP$`p.adj Culture` < 0.05, "UP", DE.Susp.vs.Adh.table.CP$Color)
+DE.Susp.vs.Adh.table.CP$Color <- ifelse(DE.Susp.vs.Adh.table.CP$`Log2FC(Susp-Adh)`<0 & 
+                                          DE.Susp.vs.Adh.table.CP$`p.adj Culture` < 0.05, "DOWN", DE.Susp.vs.Adh.table.CP$Color)
+
+g1 <- ggplot(data=DE.Susp.vs.Adh.table.CP, aes(x=`Log2FC(Susp-Adh)`, y=-log10(`p.v Culture`), col=Color, label=Label)) + 
+    geom_point() + 
+    theme_classic()+
+  geom_label_repel(max.overlaps = 1000, seed=1234, aes(label = Label,fontface = 'bold')) + 
+  scale_color_manual(values=c("#23b866","darkgrey", "#7a5195"))+
+  xlab("log2FC(suspension vs adherent cell lines)")+ylab("-log10(p-value)")+ 
+  theme(legend.position="bottom",
+        legend.title = element_text(size=16),legend.text = element_text(size=16),
+        axis.text.x = element_text(size=18),
+        axis.text.y = element_text(size=18),
+        axis.title=element_text(size=18,face="bold"))
+g1
+```
+
+# CM volcano plot
+
+
+
+```{r , fig.width=10, fig.height=8}
+
+top5.up <- DE.Susp.vs.Adh.table.CM[DE.Susp.vs.Adh.table.CM$`Log2FC(Susp-Adh)`>0,][1:15, "Accession"]
+top5.dn <- DE.Susp.vs.Adh.table.CM[DE.Susp.vs.Adh.table.CM$`Log2FC(Susp-Adh)`<0,][1:15, "Accession"]
+
+DE.Susp.vs.Adh.table.CM$Label <- ifelse(DE.Susp.vs.Adh.table.CM$Accession %in% c(top5.up, top5.dn)&
+                                          DE.Susp.vs.Adh.table.CM$`p.adj Culture` < 0.05, DE.Susp.vs.Adh.table.CM$Gene, "")
+DE.Susp.vs.Adh.table.CM$Color <- "Not significant"
+DE.Susp.vs.Adh.table.CM$Color <- ifelse(DE.Susp.vs.Adh.table.CM$`Log2FC(Susp-Adh)`>0 & 
+                                          DE.Susp.vs.Adh.table.CM$`p.adj Culture` < 0.05, "UP", DE.Susp.vs.Adh.table.CM$Color)
+DE.Susp.vs.Adh.table.CM$Color <- ifelse(DE.Susp.vs.Adh.table.CM$`Log2FC(Susp-Adh)`<0 & 
+                                          DE.Susp.vs.Adh.table.CM$`p.adj Culture` < 0.05, "DOWN", DE.Susp.vs.Adh.table.CM$Color)
+
+g2 <- ggplot(data=DE.Susp.vs.Adh.table.CM, aes(x=`Log2FC(Susp-Adh)`, y=-log10(`p.v Culture`), col=Color, label=Label)) + 
+    geom_point() + 
+    theme_classic()+
+  geom_label_repel(max.overlaps = 1000, seed=1234, aes(label = Label),fontface = 'bold') 
+  scale_color_manual(values=c("#23b866","darkgrey", "#7a5195"))+
+  xlab("log2FC(suspension vs adherent cell lines)")+ylab("-log10(p-value)")+ 
+  theme(legend.position="bottom",
+        legend.title = element_text(size=16),legend.text = element_text(size=16),
+        axis.text.x = element_text(size=18),
+        axis.text.y = element_text(size=18),
+        axis.title=element_text(size=18,face="bold"))
+g2
+
+```
+
+# Enrichment maps
+
+
+```{r , fig.width=15, fig.height=10}
+
+edo.CP <- ORA.Susp.vs.Adh.CP$KEGG
+edo.CP@result <- edo.CP@result[edo.CP@result$pvalue < 0.05,]
+
+edo.CM <- ORA.Susp.vs.Adh.CM$KEGG
+edo.CM@result <- edo.CM@result[edo.CM@result$pvalue < 0.05 &
+                                 edo.CM@result$Description !="Coronavirus disease - COVID-19",]
+
+
+edo.CP <- pairwise_termsim(edo.CP)
+e1 <- emapplot(edo.CP)
+edo.CM <- pairwise_termsim(edo.CM)
+e2 <- emapplot(edo.CM)
+
+```
+
+
+# Combined figure
+
+
+```{r , fig.width=15, fig.height=15}
+
+top_row <- plot_grid(g1+xlim(-5.5,5)+
+                       theme(axis.line.x = element_line(color="black", size = 0.75),
+                            axis.line.y = element_line(color="black", size = 0.75)), 
+                     e1,
+                     ncol = 2,
+                     labels = c('Cell Pellet','Enrichment map'),
+                     label_fontfamily = '',
+                     axis = "tblr",
+                     label_fontface = 'bold',
+                     label_size = 18,
+                     align = 'h',
+                     rel_widths = c(1,0.75),
+                     rel_heights = c(0.75,1))
+
+bottom_row <- plot_grid(g2+xlim(-5.5,5)+
+                       theme(axis.line.x = element_line(color="black", size = 0.75),
+                            axis.line.y = element_line(color="black", size = 0.75)), 
+                       e2,
+                        ncol = 2,
+                        labels = c('Cell Media',"Enrichment map"),
+                        label_fontfamily = '',
+                        axis = "tblr",
+                        label_fontface = 'bold',
+                        label_size = 18,
+                        align = 'h',
+                        rel_widths = c(1,0.75),
+                     rel_heights = c(0.75,1))
+
+plot_grid(top_row, bottom_row, ncol = 1,
+          rel_heights = c(1,1))
+
+
+ggsave(file="Figures/DEA_culture_type.pdf")
+
+
+```
+
+

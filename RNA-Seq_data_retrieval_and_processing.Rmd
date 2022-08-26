@@ -12,13 +12,16 @@ output:
 
 
 ```{r }
-source("Install_load_packages.R")
+# R vs.4.2.0
+source("Load_packages.R")
 source("Utility_functions.R")
 source("Color_list.R")
 ```
 
 # George et al. data
 
+
+Save Z-scored, FPKM data of samples categorized by George et al. in new txt files:
 
 ```{r }
 
@@ -38,42 +41,64 @@ export_with_rowname(George.raw.categorized, "Files/George_expression_Zscores",T)
 
 George.FPKM.raw <- read.delim("Files/George_data_RNA_Seq_expression_median.txt")
 row.names(George.FPKM.raw) <- paste(George.FPKM.raw$Hugo_Symbol,row.names(George.FPKM.raw),  sep="_")
-all(row.names(George.FPKM.raw) %in% row.names(George.Zscore))
+all(row.names(George.FPKM.raw) %in% row.names(George.raw))
 George.FPKM <- George.FPKM.raw[,-c(1:2)]
 colnames(George.FPKM) <- unlist(lapply(colnames(George.FPKM), function(x){
   gsub("sclc_ucologne_2015_", "",x )
 }))
 George.FPKM <- George.FPKM[,George.annotation$Sample]
 export_with_rowname(George.FPKM, "Files/George_expression_FPKM", T)
+```
+
+Remove dupl. genes and save gct file for ssGSEA:
 
 
+```{r }
 George.FPKM.for.SSGEA <- George.FPKM
-George.FPKM.for.SSGEA$Gene <- unlist(lapply(row.names(George.FPKM.for.SSGEA),
+George.FPKM.for.SSGEA.rowSum50 <- subset(George.FPKM.for.SSGEA, rowSums(George.FPKM.for.SSGEA) > 50)
+George.FPKM.for.SSGEA.rowSum50$Gene <- unlist(lapply(row.names(George.FPKM.for.SSGEA.rowSum50),
                                                         function(x){strsplit(x, split="_")[[1]][1]}))
-duplicated.gene.names <- George.FPKM.for.SSGEA[duplicated(George.FPKM.for.SSGEA$Gene),"Gene"]
+duplicated.gene.names <- unique(George.FPKM.for.SSGEA.rowSum50[duplicated(George.FPKM.for.SSGEA.rowSum50$Gene),"Gene"])
 to.delete <- vector()
+selected <- vector()
+cor <- vector()
+cor.low <- vector()
 
+i=1
 for (i in 1:length(duplicated.gene.names)){
-  sub.table <- George.FPKM.for.SSGEA[George.FPKM.for.SSGEA$Gene==duplicated.gene.names[i],]
+  sub.table <- George.FPKM.for.SSGEA.rowSum50[George.FPKM.for.SSGEA.rowSum50$Gene==duplicated.gene.names[i],]
   sub.table$RowSum <- rowSums(sub.table[1:52])
   sub.table <- sub.table[order(sub.table$RowSum, decreasing = T),]
-  selected <- row.names(sub.table)[1]
+  selected <- c(selected, row.names(sub.table)[1])
   to.delete <- c(to.delete, row.names(sub.table)[-1])
+  sub.cor <- vector()
+  for (j in 2:nrow(sub.table)){
+    sub.cor <- c(sub.cor, 
+                 cor(as.numeric(sub.table[1,1:52]), as.numeric(sub.table[j,1:52]), use="pairwise.complete.obs", method="spearman"))
+  }
+  names(sub.cor) <- row.names(sub.table)[-1]
+  cor <- c(cor, mean(sub.cor))
+  cor.low <- c(cor.low, names(sub.cor[sub.cor < 0.25]))
 }
+hist(cor)
+quantile(cor)
+sd(cor)
+mean(cor)
 
-George.FPKM.for.SSGEA.noduplGene <- George.FPKM.for.SSGEA[!row.names(George.FPKM.for.SSGEA) %in% to.delete,]
-row.names(George.FPKM.for.SSGEA.noduplGene) <- George.FPKM.for.SSGEA.noduplGene$Gene
-George.FPKM.for.SSGEA.noduplGene$Gene <- NULL
-George.FPKM.for.SSGEA.noduplGene.rowSum50 <- subset(George.FPKM.for.SSGEA.noduplGene, rowSums(George.FPKM.for.SSGEA.noduplGene) > 50)
+George.FPKM.for.SSGEA.noduplGene <- George.FPKM.for.SSGEA.rowSum50[!row.names(George.FPKM.for.SSGEA.rowSum50) %in% to.delete,]
 
-save_as_gct(George.FPKM.for.SSGEA.noduplGene.rowSum50, "Files/George_expression_FPKM_for_ssGSEA.gct")
+quantile(rowSums(George.FPKM.for.SSGEA.rowSum50[row.names(George.FPKM.for.SSGEA.rowSum50) %in% to.delete,-ncol(George.FPKM.for.SSGEA.rowSum50)]), na.rm=T)
+quantile(rowSums(George.FPKM.for.SSGEA.rowSum50[row.names(George.FPKM.for.SSGEA.rowSum50) %in% selected,-ncol(George.FPKM.for.SSGEA.rowSum50)]), na.rm=T)
 
-
+save_as_gct(George.FPKM.for.SSGEA.noduplGene,"Gene", "Files/George_expression_FPKM_for_ssGSEA.gct")
+#save_as_gct(George.FPKM.for.SSGEA.rowSum50,"Gene", "Files/George_expression_FPKM_for_ssGSEA_keepDuplicates.gct")
 ```
+
 
 
 # CCLE data
 
+## Clean and load annotation and gene expression table
 
 ```{r Load data}
 Annot <- read.delim("Files/CCLE_Cell_lines_annotations_20181226.txt")
@@ -106,7 +131,6 @@ save(gene_IDs, file="RData/ENSG_to_geneID.RData")
 ```
 
 
-
 ```{r Filter for rows with HGNC gene ID}
 load("RData/ENSG_to_geneID.RData")
 gene_IDs.complete <- gene_IDs[gene_IDs$hgnc_symbol!="",]
@@ -118,7 +142,7 @@ Expr.SCLC$ensembl_gene_id <- unlist(lapply(Expr.SCLC$gene_id, function(x){strspl
 
 Expr.SCLC.HGNC <- merge(gene_IDs.complete, Expr.SCLC, by="ensembl_gene_id")
 
-Expr.SCLC.HGNC[duplicated(Expr.SCLC.HGNC$hgnc_symbol),"hgnc_symbol"] # we might need to deal with these later (but only 13 occurrences...)
+Expr.SCLC.HGNC[duplicated(Expr.SCLC.HGNC$hgnc_symbol),"hgnc_symbol"] # only 13 occurrences
 
 Expr.SCLC.HGNC$Row.name <- paste(Expr.SCLC.HGNC$gene_id, row.names(Expr.SCLC.HGNC), sep="_")
 
@@ -147,6 +171,7 @@ Annotation <- Annot.SCLC.Expr[,c("Common.Name", "CCLE_ID", "depMapID", "Patholog
 
 ```
 
+## Limma (diff. expr. analysis and normalization)
 
 ```{r limma start}
 d0 <- DGEList(Expr.table) # Create DGEList object

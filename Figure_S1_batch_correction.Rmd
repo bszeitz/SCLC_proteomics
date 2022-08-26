@@ -7,18 +7,20 @@ output:
 ---
 
 ```{r Load packages}
-source("Install_load_packages.R")
+# R vs.4.2.0
+source("Load_packages.R")
 source("Utility_functions.R")
 source("Color_list.R")
 ```
  
 
+# PCA plots before and after batch correction
+
+
 ```{r}
 loaded <- load("RData/Fig_QC_PCA_PVCA_HC.RData")
 loaded
 ```
-
-
 
 ```{r Cleaned PCA plots before and after merging technical replicates, fig.width = 15, fig.height = 5}
 
@@ -80,6 +82,7 @@ g
 ggsave(file="Figures/PCA_before_after_batch_correction.pdf", g)
 ```
 
+# PVCA plots before and after batch correction
 
 
 ```{r PVCA plots, fig.width = 18, fig.height = 5}
@@ -100,6 +103,9 @@ g <- ggarrange(plot_PVCA(Fig_QC_PCA_PVCA_HC$CP$Expr.Med.withinBatch, Fig_QC_PCA_
 g
 ggsave(file="Figures/PVCA_before_after_batch_correction.pdf", g)
 ```
+
+
+# Heatmaps after batch correction
 
 
 ```{r Heatmaps after batch correction, fig.width=20, fig.height=8}
@@ -162,37 +168,6 @@ dev.off()
 
 
 
-```{r}
-loaded <- load("RData/Fig_secreted.RData")
-loaded
-```
-
-
-```{r , fig.width=10, fig.height=6}
-
-
-p <- ggplot(Fig_secreted, aes(x = CP.Mean, y = CP.SD)) +
-    geom_point(alpha=0.5,aes(color = Secretion_info))+ theme_classic() + 
-  theme(legend.position = "bottom") + ggtitle("CP") + 
-  xlab("Protein mean intensity") + ylab("Protein standard deviation")+
-  scale_colour_manual( values=c("1" = "red", "2" = "blue", "3" = "lightgreen", "4" = "grey"))+
-  xlim(c(9, 33)) + ylim(c(0,5.5))
-p1 <- ggExtra::ggMarginal(p, type = "density", groupFill  = TRUE)
-
-
-p <- ggplot(Fig_secreted, aes(x = CM.Mean, y = CM.SD)) +
-    geom_point(alpha=0.5,aes(color = Secretion_info))+ theme_classic() + 
-  theme(legend.position = "bottom")  + ggtitle("CM") + 
-  xlab("Protein mean intensity") + ylab("Protein standard deviation")+
-  scale_colour_manual( values=c("1" = "red", "2" = "blue", "3" = "lightgreen", "4" = "grey"))+
-  xlim(c(9, 33)) + ylim(c(0,5.5))
-p2 <- ggExtra::ggMarginal(p, type = "density", groupFill  = TRUE)
-
-g <- ggarrange(p1,p2, ncol=2)
-g
-ggsave(file="Figures/Secreted_proteins.pdf",g)
-
-```
 
 
 

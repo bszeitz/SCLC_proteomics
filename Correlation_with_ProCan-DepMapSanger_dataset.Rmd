@@ -1,0 +1,283 @@
+---
+title: "Correlation with the ProCan-DepMapSanger dataset"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+# Load packages and functions
+
+```{r }
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+
+# Search for commonly measured cell lines
+
+Read in and clean sample info:
+
+```{r }
+ProCan.Annot <- read.xlsx("Files/DepMap/Goncalves_2022_TableS2.xlsx",2)
+colnames(ProCan.Annot) <- ProCan.Annot[1,]
+ProCan.Annot <- ProCan.Annot[-1,]
+
+ProCan.Annot <- ProCan.Annot[ProCan.Annot$Cancer_type =="Small Cell Lung Carcinoma",]
+```
+
+Search for commonly present cell lines in both study:
+
+```{r }
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+
+Annot$Cell_line <- Annot$Sample
+
+Annot$Cell_line <- ifelse(startsWith(Annot$Cell_line,"H"), paste("NCI",Annot$Cell_line,sep="-"), Annot$Cell_line)
+Annot$Cell_line <- ifelse(Annot$Cell_line =="CRL2177", "SW1271", Annot$Cell_line)
+Annot$Cell_line <- ifelse(Annot$Cell_line =="CRL2066", "DMS114", Annot$Cell_line)
+Annot$Cell_line <- ifelse(Annot$Cell_line =="DMS53", "DMS-53", Annot$Cell_line)
+Annot$Cell_line <- ifelse(Annot$Cell_line =="DMS153", "DMS-153", Annot$Cell_line)
+Annot$Cell_line <- ifelse(Annot$Cell_line =="DMS114", "DMS-114", Annot$Cell_line)
+Annot$Cell_line <- ifelse(Annot$Cell_line =="SHP77", "SHP-77", Annot$Cell_line)
+Annot$Cell_line <- ifelse(Annot$Cell_line =="CORL311", "COR-L311", Annot$Cell_line)
+
+Annot$Cell_line[!Annot$Cell_line %in% ProCan.Annot$Cell_line]
+
+ProCan.Annot.common <- ProCan.Annot[ProCan.Annot$Cell_line %in% Annot$Cell_line,]
+
+for (i in 1:nrow(ProCan.Annot.common)){
+  ProCan.Annot.common$Sample[i] <- Annot[Annot$Cell_line == ProCan.Annot.common$Cell_line[i],"Sample"]
+}
+
+Annot.common <- Annot[Annot$Cell_line %in% ProCan.Annot.common$Cell_line,]
+
+```
+
+8 cell lines were not included in the ProCan study: H841 (Y), GLC4 (A), HLHE (Y), DMS153 (A), H378 (A), H1882 (A), N417 (N), H372 (Y)
+
+# Search for commonly quantified proteins
+
+Read in and clean protein expression table:
+
+
+```{r }
+ProCan.Expr <- read.xlsx("Files/DepMap/Goncalves_2022_TableS3.xlsx",1)
+colnames(ProCan.Expr) <- ProCan.Expr[1,]
+ProCan.Expr <- ProCan.Expr[-1,]
+row.names(ProCan.Expr) <- ProCan.Expr[,1]
+ProCan.Expr <- ProCan.Expr[,-1]
+
+ProCan.Expr.common <- as.data.frame(t(ProCan.Expr[ProCan.Annot.common$Project_Identifier,]))
+
+for (i in 1:ncol(ProCan.Expr.common)){
+  colnames(ProCan.Expr.common)[i] <- ProCan.Annot.common[ProCan.Annot.common$Project_Identifier == colnames(ProCan.Expr.common)[i], "Sample"]
+}
+
+row.names(ProCan.Expr.common) <- sapply(strsplit(row.names(ProCan.Expr.common), split=";"), "[[",1)
+ProCan.Expr.common <- filter_missingvalues(ProCan.Expr.common, 1)
+
+
+```
+
+
+
+7916 and 5255 common proteins quantified in both studies in the cell pellet and media, respectively
+
+```{r }
+CP.expr <- read_in_with_rowname("Files/CP_expression_full",F)[,Annot.common$Sample]
+CP.expr <- filter_missingvalues(CP.expr, 1)
+
+common.proteins <- intersect(row.names(CP.expr), row.names(ProCan.Expr.common))
+
+ProCan.Expr.common.common <- ProCan.Expr.common[common.proteins,]
+CP.expr.commmon <- CP.expr[common.proteins,colnames(ProCan.Expr.common.common)]
+
+
+CM.expr <- read_in_with_rowname("Files/CM_expression_full",F)[,Annot.common$Sample]
+CM.expr <- filter_missingvalues(CM.expr, 1)
+ProCan.Expr.common.secr <- filter_missingvalues(ProCan.Expr.common[row.names(ProCan.Expr.common) %in% row.names(CM.expr),],1)
+
+common.proteins.cm <- intersect(row.names(CM.expr), row.names(ProCan.Expr.common.secr))
+
+CM.expr.common <- CM.expr[common.proteins.cm,]
+ProCan.Expr.common.CM <- ProCan.Expr.common[common.proteins.cm,]
+
+
+```
+
+
+ProCan data is already normalized
+
+```{r Sample histograms, fig.width = 15, fig.height = 5}
+plot_sample_histograms(ProCan.Expr.common.common, "ProCan", "After loading") 
+```
+
+
+
+
+# Correlation between protein abundances (min.80% pairwise complete obs)
+
+
+```{r }
+Corr.anal.res.CP <- data.frame(Protein = row.names(ProCan.Expr.common.common),
+                            Nr.common.obs = NA,
+                            Corr.coeff = NA,
+                            Corr.pvalue = NA,
+                            Lwr.CI = NA,
+                            Upr.CI = NA,
+                            t = NA,
+                            df = NA)
+Corr.anal.res.CM <- data.frame(Protein = row.names(ProCan.Expr.common.CM),
+                            Nr.common.obs = NA,
+                            Corr.coeff = NA,
+                            Corr.pvalue = NA,
+                            Lwr.CI = NA,
+                            Upr.CI = NA,
+                            t = NA,
+                            df = NA)
+Corr.anal.res.random <- Corr.anal.res.CP
+Corr.anal.res.random.secr <- Corr.anal.res.CM
+
+
+i=1
+for (i in 1:nrow(Corr.anal.res.CP)){
+  merged.df <- data.frame(ProCan = as.numeric(ProCan.Expr.common.common[i,]),
+                       Own = as.numeric(CP.expr.commmon[i,]))
+  nr.obs <- nrow(na.omit(merged.df))
+  if (nr.obs < 15){
+    Corr.anal.res.CP[i,2:8] <- NA
+    next
+  }
+  corres <- cor.test(merged.df$ProCan, merged.df$Own, use="pairwise.complete.obs", method = "pearson")
+  Corr.anal.res.CP[i,2:8] <- paste(c(nr.obs, corres$estimate, corres$p.value, corres$conf.int[1], corres$conf.int[2], corres$statistic, corres$parameter))
+}
+Corr.anal.res.CP[2:8] <- sapply(Corr.anal.res.CP[2:8], as.numeric)
+Corr.anal.res.CP$Corr.FDR <- p.adjust(Corr.anal.res.CP$Corr.pvalue, "BH")
+
+
+for (i in 1:nrow(Corr.anal.res.CM)){
+  merged.df <- data.frame(ProCan = as.numeric(ProCan.Expr.common.CM[i,]),
+                       Own = as.numeric(CM.expr.common[i,]))
+  nr.obs <- nrow(na.omit(merged.df))
+  if (nr.obs < 15){
+    Corr.anal.res.CM[i,2:8] <- NA
+    next
+  }
+  corres <- cor.test(merged.df$ProCan, merged.df$Own, use="pairwise.complete.obs", method = "pearson")
+  Corr.anal.res.CM[i,2:8] <- paste(c(nr.obs, corres$estimate, corres$p.value, corres$conf.int[1], corres$conf.int[2], corres$statistic, corres$parameter))
+}
+Corr.anal.res.CM[2:8] <- sapply(Corr.anal.res.CM[2:8], as.numeric)
+Corr.anal.res.CM$Corr.FDR <- p.adjust(Corr.anal.res.CM$Corr.pvalue, "BH")
+
+
+seeds <- seq(1,nrow(Corr.anal.res.random))
+i=1
+for (i in 1:nrow(Corr.anal.res.random)){
+  set.seed(seeds[i])
+  random.order <- sample(ncol(ProCan.Expr.common.common))
+  merged.df <- data.frame(ProCan = as.numeric(ProCan.Expr.common.common[i,]),
+                       Own = as.numeric(CP.expr.commmon[i,random.order]))
+  nr.obs <- nrow(na.omit(merged.df))
+  if (nr.obs < 15){
+    Corr.anal.res.random[i,2:8] <- NA
+    next
+  }
+  corres <- cor.test(merged.df$ProCan, merged.df$Own, use="pairwise.complete.obs", method = "pearson")
+  Corr.anal.res.random[i,2:8] <- paste(c(nr.obs, corres$estimate, corres$p.value, corres$conf.int[1], corres$conf.int[2], corres$statistic, corres$parameter))
+}
+Corr.anal.res.random[2:8] <- sapply(Corr.anal.res.random[2:8], as.numeric)
+Corr.anal.res.random$Corr.FDR <- p.adjust(Corr.anal.res.random$Corr.pvalue, "BH")
+
+
+
+seeds <- seq(1,nrow(Corr.anal.res.random.secr))
+i=1
+for (i in 1:nrow(Corr.anal.res.random.secr)){
+  set.seed(seeds[i])
+  random.order <- sample(ncol(ProCan.Expr.common.common))
+  merged.df <- data.frame(ProCan = as.numeric(ProCan.Expr.common.common[i,]),
+                       Own = as.numeric(CP.expr.commmon[i,random.order]))
+  nr.obs <- nrow(na.omit(merged.df))
+  if (nr.obs < 15){
+    Corr.anal.res.random.secr[i,2:8] <- NA
+    next
+  }
+  corres <- cor.test(merged.df$ProCan, merged.df$Own, use="pairwise.complete.obs", method = "pearson")
+  Corr.anal.res.random.secr[i,2:8] <- paste(c(nr.obs, corres$estimate, corres$p.value, corres$conf.int[1], corres$conf.int[2], corres$statistic, corres$parameter))
+}
+Corr.anal.res.random.secr[2:8] <- sapply(Corr.anal.res.random.secr[2:8], as.numeric)
+Corr.anal.res.random.secr$Corr.FDR <- p.adjust(Corr.anal.res.random.secr$Corr.pvalue, "BH")
+
+```
+
+
+
+
+```{r }
+quantile(Corr.anal.res.CP$Corr.coeff, na.rm=TRUE)
+quantile(Corr.anal.res.CM$Corr.coeff, na.rm=TRUE)
+quantile(Corr.anal.res.random$Corr.coeff, na.rm=TRUE)
+
+```
+
+Random indicates the protein expression correlation between randomly shuffled samples.
+
+```{r }
+density.DF <- na.omit(data.frame(Protein = c(Corr.anal.res.CP$Protein, Corr.anal.res.CM$Protein, Corr.anal.res.random$Protein),
+                         Corr.coef = c(Corr.anal.res.CP$Corr.coeff, Corr.anal.res.CM$Corr.coeff,Corr.anal.res.random$Corr.coeff),
+                         Data = c(rep("Matched.CP", nrow(Corr.anal.res.CP)), 
+                                  rep("Matched.CM", nrow(Corr.anal.res.CM)),
+                                  rep("Random", nrow(Corr.anal.res.random)))))
+ggplot(density.DF, aes(x=Corr.coef, fill=Data)) +
+  geom_histogram(alpha=0.7,color="black",aes(y = ..density..))
+
+```
+
+## Density plots
+
+
+Correlation with CP data is good (but not that good with CM data)
+
+```{r , fig.width=8, fig.height=3}
+density.DF <- na.omit(data.frame(Protein = c(Corr.anal.res.CP$Protein,
+                                             Corr.anal.res.CM$Protein, 
+                                             Corr.anal.res.random$Protein,
+                                             Corr.anal.res.random.secr$Protein),
+                         Corr.coef = c(Corr.anal.res.CP$Corr.coeff, 
+                                       Corr.anal.res.CM$Corr.coeff,
+                                       Corr.anal.res.random$Corr.coeff,
+                                       Corr.anal.res.random.secr$Corr.coeff),
+                         Data = c(rep("Matched.CP", nrow(Corr.anal.res.CP)), 
+                                  rep("Matched.CM", nrow(Corr.anal.res.CM)),
+                                  rep("Random.CP", nrow(Corr.anal.res.random)),
+                                  rep("Random.CM", nrow(Corr.anal.res.random.secr))),
+                         `Data type` = c(rep("Corr. btw. matched samples", nrow(Corr.anal.res.CP)), 
+                                       rep("Corr. btw. matched samples", nrow(Corr.anal.res.CM)),
+                                       rep("Corr. btw. randomly shuffled samples", nrow(Corr.anal.res.random)),
+                                       rep("Corr. btw. randomly shuffled samples", nrow(Corr.anal.res.random.secr))),
+                         check.names = FALSE))
+g1 <- ggplot(density.DF[grepl("CP",density.DF$Data),], aes(x=Corr.coef, fill=`Data type`)) +
+  geom_density(alpha=0.4)+
+    theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+g2 <- ggplot(density.DF[grepl("CM",density.DF$Data),], aes(x=Corr.coef, fill=`Data type`)) +
+  geom_density(alpha=0.4)+
+    theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+ggarrange(g1, g2, common.legend = TRUE)
+
+```
+
+
+```{r , fig.width=5, fig.height=3}
+g1 + xlab("Pearson's r") + ylab("Density")
+ggsave(g1 + xlab("Pearson's r") + ylab("Density"), file="Figures/Correlation_btw_ProCan_and_ours.png")
+
+```
+
+
+
+
+

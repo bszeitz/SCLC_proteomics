@@ -1,0 +1,237 @@
+---
+title: "Chemo info checks"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+# Load packages, functions and files
+
+```{r }
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+```{r }
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+CP.expr.imp <- read_in_with_rowname("Files/CP_expression_filtered_imputed",F)[,Annot$Sample]
+CM.expr.imp <- read_in_with_rowname("Files/CM_expression_filtered_imputed",F)[,Annot$Sample]
+CP.expr <- read_in_with_rowname("Files/CP_expression_full",F)[,Annot$Sample]
+CM.expr <- read_in_with_rowname("Files/CM_expression_full",F)[,Annot$Sample]
+Protein.to.gene <- read_in_with_rowname("Files/Protein_to_Gene",F)
+
+```
+
+Create shorter list of samples where chemo info is available
+```{r }
+Annot <- Annot[Annot$Chemo !="",]
+CP.expr.imp <- CP.expr.imp[,row.names(Annot)]
+CM.expr.imp <- CM.expr.imp[,row.names(Annot)]
+
+```
+
+Distribution of chemo info across the subtypes:
+
+```{r , fig.width=4, fig.height=3}
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+
+dt <- data.frame(A = c(4,2,2),
+                 N = c(1,2,4),
+                 P = c(1,2,1),
+                 Y = c(1,2,4),
+                 row.names = c("chemo-naive","post-chemo","N/A"))
+dt <- Annot[,c("Sample", "Subtype", "Chemo")]
+dt$Subtype <- factor(dt$Subtype, levels=c("SCLC-Y","SCLC-P","SCLC-N","SCLC-A"))
+dt$Chemo <- ifelse(dt$Chemo=="","N/A",dt$Chemo)
+dt$Chemo <- factor(dt$Chemo, levels=c(
+  "chemo-naive", "post-chemo","N/A"
+))
+
+ggbarstats(
+  dt, Subtype, Chemo,
+  results.subtitle = FALSE,
+)+ scale_fill_manual(values = c("#0000FE", "#21FE06","gold", "#FB02FE"))+xlab("")
+
+```
+
+
+# Differential expression analysis
+
+
+```{r ,eval=F}
+CP.Chemo.ANOVA <- ANOVAandTK_padj_rank(annotation = Annot, colname_for_factor = "Chemo",
+                                        levelOrder = c("chemo-naive", "post-chemo"), m = CP.expr.imp)
+CM.Chemo.ANOVA <- ANOVAandTK_padj_rank(annotation = Annot, colname_for_factor = "Chemo",
+                                        levelOrder = c("chemo-naive", "post-chemo"), m = CM.expr.imp)
+save(CP.Chemo.ANOVA, CM.Chemo.ANOVA, file="RData/CP_and_CM_DEA_Chemo.RData")
+export_with_rowname(CP.Chemo.ANOVA, "Files/CP_DEA_Chemo", F)
+export_with_rowname(CM.Chemo.ANOVA, "Files/CM_DEA_Chemo", F)
+```
+
+
+```{r }
+load("RData/CP_and_CM_DEA_Chemo.RData")
+
+```
+
+
+There are no diff. expr. proteins at 5% FDR level!!!
+
+# Compare chemo and subtype DEA results
+
+```{r }
+CP.Chemo.ANOVA.sign <- CP.Chemo.ANOVA[CP.Chemo.ANOVA$`p.v Chemo` < 0.05,]
+CM.Chemo.ANOVA.sign <- CM.Chemo.ANOVA[CM.Chemo.ANOVA$`p.v Chemo` < 0.05,]
+
+intersect(CP.Chemo.ANOVA.sign$Accession, CM.Chemo.ANOVA.sign$Accession) # no overlap
+
+CP.expr.imp <- read_in_with_rowname("Files/CP_expression_filtered_imputed",F)[,Annot$Sample]
+CM.expr.imp <- read_in_with_rowname("Files/CM_expression_filtered_imputed",F)[,Annot$Sample]
+CP.CM.expr <- rbind(CP.expr.imp[CP.Chemo.ANOVA.sign$Accession,],
+                    CM.expr.imp[CM.Chemo.ANOVA.sign$Accession,])
+row.splitter <- c(rep("CP",nrow(CP.Chemo.ANOVA.sign)),
+                  rep("CM",nrow(CM.Chemo.ANOVA.sign)))
+
+NE.EMT.scores <- read_in_with_rowname("Files/NE_EMT_scores",F)
+row.names(NE.EMT.scores) <- NE.EMT.scores$Sample
+NE.EMT.scores <- NE.EMT.scores[Annot$Sample,]
+
+Annot$NEscore <- NE.EMT.scores$NEscore
+Annot$EMTscore <- NE.EMT.scores$EMTscore
+
+```
+
+
+```{r }
+CP.DEA.Subtype <- read_in_with_rowname("Files/CP_DEA_Subtype",T)
+CP.DEA.Subtype.sign <- CP.DEA.Subtype[CP.DEA.Subtype$`p.adj Subtype` < 0.05,]
+CM.DEA.Subtype <- read_in_with_rowname("Files/CM_DEA_Subtype",T)
+CM.DEA.Subtype.sign <- CM.DEA.Subtype[CM.DEA.Subtype$`p.adj Subtype` < 0.05,]
+
+intersect(row.names(CP.CM.expr), CP.DEA.Subtype.sign$Accession)
+intersect(row.names(CP.CM.expr), CM.DEA.Subtype.sign$Accession)
+
+```
+
+```{r }
+DEA.subtype <- rbind(CP.DEA.Subtype[CP.Chemo.ANOVA.sign$Accession,],
+                     CM.DEA.Subtype[CM.Chemo.ANOVA.sign$Accession,])
+DEA.subtype$`-log10(p-value)` <- -log10(DEA.subtype$`p.v Subtype`)
+
+DEA.subtype$`Diff. expr.\nwith subtype` <- ifelse(DEA.subtype$`p.v Subtype` < 0.05, "Y (nominal p<0.05)","N")
+DEA.subtype$`Diff. expr.\nwith subtype` <- ifelse(DEA.subtype$`p.adj Subtype` < 0.05, "Y (FDR <0.05)",
+                                                  DEA.subtype$`Diff. expr.\nwith subtype`)
+
+row.ha <- HeatmapAnnotation(df =DEA.subtype[,c("-log10(p-value)", "Log2FC(SCLC-N-SCLC-A)","Log2FC(SCLC-P-SCLC-A)",
+                                          "Log2FC(SCLC-Y-SCLC-A)","Log2FC(SCLC-P-SCLC-N)",
+                                          "Log2FC(SCLC-Y-SCLC-N)","Log2FC(SCLC-Y-SCLC-P)")],
+                              which="row",
+                              col=list("-log10(p-value)" = colorRamp2(c(0,1.29,1.3), c("white","white","pink")),
+                                       "Log2FC(SCLC-N-SCLC-A)" = colorRamp2(c(-0.5,0,0.5), c("darkgreen","white","gold")),
+                                       "Log2FC(SCLC-P-SCLC-A)" = colorRamp2(c(-0.5,0,0.5), c("darkgreen","white","gold")),
+                                       "Log2FC(SCLC-Y-SCLC-A)" = colorRamp2(c(-0.5,0,0.5), c("darkgreen","white","gold")),
+                                       "Log2FC(SCLC-P-SCLC-N)" = colorRamp2(c(-0.5,0,0.5), c("darkgreen","white","gold")),
+                                       "Log2FC(SCLC-Y-SCLC-N)" = colorRamp2(c(-0.5,0,0.5), c("darkgreen","white","gold")),
+                                       "Log2FC(SCLC-Y-SCLC-P)" = colorRamp2(c(-0.5,0,0.5), c("darkgreen","white","gold"))),
+                              #annotation_name_side = "right",
+                              gp = gpar(col = "grey"))#,
+                              #gap = unit(c(2,1,1,1,2,1,1,1.5,2), 'mm'),
+                              #show_legend = TRUE,
+                              #show_annotation_name = TRUE)
+
+row.ha <- rowAnnotation(`Subtype DEA\n-log10(p-value)` = anno_barplot(DEA.subtype$`-log10(p-value)`,
+                                                           gp = gpar(fill = ifelse(DEA.subtype$`-log10(p-value)` > 1.3, 2,0)), 
+                                                           width = unit(2, "cm")))
+
+
+row.ha <- rowAnnotation(`Diff. expr.\nwith subtype` = DEA.subtype$`Diff. expr.\nwith subtype`,
+                        col = list(`Diff. expr.\nwith subtype` = 
+                                     c("N" = "white", "Y (nominal p<0.05)" = "orange",
+                                       "Y (FDR <0.05)" = "black")))
+
+```
+
+
+
+```{r , fig.width=12, fig.height=10}
+column.ha = HeatmapAnnotation(df =Annot[,c("Subtype", "Culture type","Cell line origin","Chemo")],
+                              which="col",
+                              col=colorlist,
+                              annotation_name_side = "right",
+                              gp = gpar(col = "grey"),
+                              "NE score" = anno_barplot(Annot$NEscore,
+                                                        gp = gpar(fill =  c("#76069a")),
+                                                        height = unit(1.5, "cm"),
+                                                        axis_param = list(
+                                                          side = "left",
+                                                          at = c(-2.25,0,1.5), 
+                                                          labels = c("-2.25","0", "+1.5") )),
+                              "EMT score" = anno_barplot(Annot$EMTscore,
+                                                            gp = gpar(fill =  c("#005757")),
+                                                            height = unit(1.5, "cm"),
+                                                            axis_param = list(
+                                                              side = "left",
+                                                              at = c(-1.9,0,1.6), 
+                                                              labels = c("-1.9","0", "+1.6") )),
+                              gap = unit(c(2,1,1,1,2,1,1,1.5,2), 'mm'),
+                              show_legend = TRUE,
+                              show_annotation_name = TRUE)
+set.seed(12345)
+ht = Heatmap(t(scale(t(CP.CM.expr))),
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+                     cluster_rows = T, top_annotation = column.ha, 
+             #column_labels =  Annot.Cluster$Sample,
+             #column_split = Annot.Cluster$Cluster,  
+             cluster_columns = T,
+             column_km = 2,
+             #clustering_distance_columns = "pearson",
+             clustering_method_columns = "complete",
+             clustering_method_rows = "complete",
+             #clustering_distance_rows = "pearson",
+             row_split = row.splitter,
+             #row_km  = 4,
+             show_row_dend = F,
+             right_annotation = row.ha,
+             show_row_names = F, 
+             #row_title = NULL,
+             column_gap = unit(0.1, "cm"),
+             #row_title_gp = gpar(fontsize = 10),
+             column_names_gp = gpar(fontsize = 12),
+             #row_split = rowsplits, 
+             gap = unit(0.1, "cm"),
+             show_heatmap_legend = T,
+             show_column_names = F,
+             #height = unit(0.05, "cm"),
+             #heatmap_height = unit(20, "cm"),
+             heatmap_width = unit(10, "cm"))
+ht = draw(ht, annotation_legend_side="right",
+             heatmap_legend_side="left")
+
+```
+
+
+
+```{r , fig.width=3, fig.height=2}
+
+Significance.list <- list("Diff.expr. with subtype" = unique(c(CP.DEA.Subtype.sign$Accession, CM.DEA.Subtype.sign$Accession)),
+                          "Diff.expr. with chemo status" = row.names(CP.CM.expr))
+ggvenn(
+  Significance.list, 
+    fill_color = c("#0073C2FF", "#EFC000FF","#0073C2FF"), #c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF"),
+  stroke_size = 1, set_name_size = 3,show_percentage = F,stroke_color = "white"
+  )
+```
+
+Generally, there is very small overlap btw the proteins differentially expressed across the subtypes and chemo status:
+
+- 1067 DE across subtypes
+- 385 DE across chemo status
+- 53 commonly DE across subtypes + chemo status
+
+

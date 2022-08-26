@@ -1,0 +1,395 @@
+---
+title: "ssGSEA pre-processing and results"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+# Load packages and functions
+
+
+```{r }
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+
+# Create short gct file containing only the subtype-specific gene sets for ssGSEA
+
+```{r}
+
+#all.genesets <- read.delim("Files/GSEA/msigdb.v7.4.symbols.txt", header = F)
+
+interesting.genesets <- as.data.frame(read_xlsx("Files/GSEA/Supplementary_GSEA_results.xlsx", sheet = 2))
+#interesting.genesets <- unique(interesting.genesets$GeneSet)
+
+#all.genesets.interesting <- all.genesets[all.genesets$V1 %in% interesting.genesets,]
+
+#write.table(all.genesets.interesting, "Files/GSEA/msigdb.v7.4.symbols_subtypeSpecific.gmt", row.names = F, na = "", quote = F, sep="\t", col.names = F)
+
+```
+
+# Read in ssGSEA results
+
+```{r }
+ssGSEA.raw <- read.gct("Files/GSEA/2022-02-06_SubtypeSpecific/TCGA_rowSum50_ssGSEA-combined.gct")
+
+Categories <- read_in_with_rowname("Files/George_annotation",F)
+
+```
+
+
+Min-max scaling of the scores
+
+```{r }
+
+ssGSEA <- apply(ssGSEA.raw[,Categories$Sample], c(1,2), function(x){
+  as.numeric(trimws(x))
+})
+
+ssGSEA.scaled <- ssGSEA
+for (i in 1:nrow(ssGSEA.scaled)){
+  ssGSEA.scaled[i,] <- min_max_scaling(ssGSEA.scaled[i,])
+}
+
+```
+
+
+# Heatmap of ssGSEA results
+
+
+## All subtype-specific gene sets:
+
+```{r , fig.width=15, fig.height=15}
+
+duplicated.genesets <- interesting.genesets[interesting.genesets$GeneSet %in% interesting.genesets[duplicated(interesting.genesets$GeneSet),"GeneSet"],]
+
+for (i in 1:nrow(interesting.genesets)){
+  if (interesting.genesets$GeneSet[i]=="GOBP_CYTOKINE_MEDIATED_SIGNALING_PATHWAY" & interesting.genesets$Subtype[i]=="SCLC-Y"){
+    interesting.genesets$GeneSet[i] <- "GOBP_CYTOKINE_MEDIATED_SIGNALING_PATHWAY.2" 
+  }
+}
+row.names(interesting.genesets) <- interesting.genesets$GeneSet
+
+ssGSEA.scaled.duplum <- t(as.matrix(ssGSEA.scaled[c( "GOBP_CYTOKINE_MEDIATED_SIGNALING_PATHWAY"),]))
+row.names(ssGSEA.scaled.duplum) <- c("GOBP_CYTOKINE_MEDIATED_SIGNALING_PATHWAY.2")
+
+ssGSEA.scaled.extended <- rbind(ssGSEA.scaled, ssGSEA.scaled.duplum)
+ssGSEA.scaled.extended <- ssGSEA.scaled.extended[row.names(interesting.genesets),]
+
+colnames(ssGSEA.scaled.extended) == Categories$Sample
+
+row.ha <- HeatmapAnnotation(df=interesting.genesets[,c("Significance", "Avr.NES_Proteomics", "Avr.NES_Transcriptomics")],
+                        which="col",
+                        col = list(Significance = 
+                                     c("Only.Proteomics" = "red",
+                                       "Only.Transcriptomics" = "blue",
+                                       "Both" = "green"),
+                                   Avr.NES_Proteomics = colorRamp2(c(-2, 0,2), 
+                                       c("blue",  "white","red")),
+                                   Avr.NES_Transcriptomics = 
+                                     colorRamp2(c(-2,0,2), 
+                                       c("blue", "white","red"))))
+
+
+```
+
+
+```{r , fig.width=22, fig.height=15}
+ht <- Heatmap(t(ssGSEA.scaled.extended), 
+              column_split = interesting.genesets$Subtype,
+              cluster_column_slices = F,
+              cluster_row_slices = F,
+        top_annotation = row.ha, 
+        row_names_gp  = gpar(fontsize = 10),
+        row_split = Categories$`Subtype assignment`)
+draw(ht, annotation_legend_side="bottom",
+             heatmap_legend_side="bottom")
+
+```
+
+## Selected representative gene sets
+
+
+```{r }
+representative.genesets <- c("GOBP_CELLULAR_RESPIRATION", "GOBP_REGULATION_OF_NEURAL_PRECURSOR_CELL_PROLIFERATION",
+                             "GOBP_SUBPALLIUM_DEVELOPMENT", "KEGG_OXIDATIVE_PHOSPHORYLATION", 
+                             "GOBP_ACTIN_CYTOSKELETON_REORGANIZATION", "GOBP_CELL_ACTIVATION_INVOLVED_IN_IMMUNE_RESPONSE",
+                             "GOBP_CELL_CELL_ADHESION", "GOBP_CYTOKINE_MEDIATED_SIGNALING_PATHWAY",
+                             "GOBP_DNA_REPLICATION", "GOBP_EPIDERMIS_DEVELOPMENT",
+                             "GOBP_EPITHELIAL_CELL_DIFFERENTIATION", "REACTOME_NEUTROPHIL_DEGRANULATION",
+                             "REACTOME_RNA_POLYMERASE_III_TRANSCRIPTION", "GOBP_POSITIVE_REGULATION_OF_LAMELLIPODIUM_ORGANIZATION",
+                             "KEGG_NEUROTROPHIN_SIGNALING_PATHWAY", "REACTOME_CHROMATIN_MODIFYING_ENZYMES",
+                             "GOBP_PEPTIDYL_LYSINE_ACETYLATION", "REACTOME_DNA_DOUBLE_STRAND_BREAK_REPAIR",
+                             "REACTOME_INTERLEUKIN_12_FAMILY_SIGNALING",
+                             "REACTOME_GENE_AND_PROTEIN_EXPRESSION_BY_JAK_STAT_SIGNALING_AFTER_INTERLEUKIN_12_STIMULATION",
+                             "GOBP_NEGATIVE_REGULATION_OF_EXTRINSIC_APOPTOTIC_SIGNALING_PATHWAY_VIA_DEATH_DOMAIN_RECEPTORS", 
+                             "GOBP_POSITIVE_REGULATION_OF_CELL_SUBSTRATE_ADHESION",
+                             "REACTOME_SIGNALING_BY_RHO_GTPASES_MIRO_GTPASES_AND_RHOBTB3", "REACTOME_SIGNALING_BY_INTERLEUKINS",
+                             "GOBP_REGULATION_OF_CELLULAR_RESPONSE_TO_GROWTH_FACTOR_STIMULUS", "REACTOME_CYTOKINE_SIGNALING_IN_IMMUNE_SYSTEM",
+                             "GOBP_REGULATION_OF_MAPK_CASCADE", "GOBP_CYTOKINE_MEDIATED_SIGNALING_PATHWAY.2",
+                             "REACTOME_EXTRACELLULAR_MATRIX_ORGANIZATION", "REACTOME_DISORDERS_OF_TRANSMEMBRANE_TRANSPORTERS",
+                             "HALLMARK_INFLAMMATORY_RESPONSE", "GOBP_CELL_SUBSTRATE_ADHESION", "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION")
+
+
+representative.genesets.short.name <- c("Respiratory\nchain", "Neural precursor\ncell proliferation",
+                             "Subpallium\ndevelopment", "Oxidative\nphosphorylation", 
+                             "Cytoskeleton", "Immune\nresponse",
+                             "Cell\nadhesion", "Cytokine\nsignaling",
+                             "DNA\nreplication", "Epidermis\ndevelopment",
+                             "Epithelial cell\ndifferentiation", "Neutrophil\ndegranulation",
+                             "Transcription", "Lamellipodium\norganization",
+                             "Neutrophin\nsignaling pathway", "Chromatin\nmodification",
+                             "Protein\nacetylation", "DNA\nrepair",
+                             "Interleukin 12\nresponse",
+                             "JAK-STAT\nsignaling",
+                             "Apoptotic\npathways", 
+                             "Regulation of\ncell-substrate adhesion (transcr.)",
+                             "Signaling by\nRho-GTPases", "Interleukin\nsignaling",
+                             "Response to\ngrowth factors", "Cytokine signaling\nin immune response",
+                             "MAPK\ncascade", "Cytokine-mediated\nsignaling",
+                             "ECM\norganization", "Transmembrane transporter\ndisorders",
+                             "Inflammatory\nresponse", "Cell-substrate\nadhesion (prot.)",
+                             "Epithelial mesenchymal\ntransition")
+
+representative.genesets.short.name2 <- c("Respiratory chain", "Neural precursor cell proliferation",
+                             "Subpallium development", "Oxidative phosphorylation", 
+                             "Cytoskeleton", "Immune response",
+                             "Cell adhesion", "Cytokine signaling",
+                             "DNA replication", "Epidermis development",
+                             "Epithelial cell differentiation", "Neutrophil degranulation",
+                             "Transcription", "Lamellipodium organization",
+                             "Neutrophin signaling pathway", "Chromatin modification",
+                             "Protein acetylation", "DNA repair",
+                             "Interleukin 12 response",
+                             "JAK-STAT signaling",
+                             "Apoptotic pathways", 
+                             "Regulation of cell-substrate adhesion (transcr.)",
+                             "Signaling by Rho-GTPases", "Interleukin signaling",
+                             "Response to growth factors", "Cytokine signaling in immune response",
+                             "MAPK cascade", "Cytokine-mediated signaling",
+                             "ECM organization", "Transmembrane transporter disorders",
+                             "Inflammatory response", "Cell-substrate adhesion (prot.)",
+                             "Epithelial mesenchymal transition")
+
+
+direction <- c("UP in A (significant in proteomics)", "UP in A (significant in both)",
+                             "UP in A (significant in transcriptomics)", "UP in A (significant in proteomics)", 
+                             "DOWN in N (significant in proteomics)", "DOWN in N (significant in proteomics)",
+                             "DOWN in N (significant in proteomics)", "DOWN in N (significant in proteomics)",
+                             "UP in N (significant in proteomics)", "DOWN in N (significant in both)",
+                             "DOWN in N (significant in proteomics)", "DOWN in N (significant in proteomics)",
+                             "UP in N (significant in proteomics)", "UP in P (significant in both)",
+                             "UP in P (significant in both)", "DOWN in Y (significant in proteomics)",
+                             "DOWN in Y (significant in proteomics)", "DOWN in Y (significant in proteomics)",
+                             "UP in Y (significant in transcriptomics)",
+                             "UP in Y (significant in transcriptomics)",
+                             "UP in Y (significant in transcriptomics)", 
+                             "UP in Y (significant in transcriptomics)",
+                             "UP in Y (significant in proteomics)", "UP in Y (significant in proteomics)",
+                             "UP in Y (significant in both)", "UP in Y (significant in proteomics)",
+                             "UP in Y (significant in both)", "UP in Y (significant in both)",
+                             "UP in Y (significant in both)", "UP in Y (significant in proteomics)",
+                             "UP in Y (significant in both)", "UP in Y (significant in both)", "UP in Y (significant in both)")
+
+```
+
+
+```{r , fig.width=22, fig.height=15}
+row.ha <- HeatmapAnnotation(df=interesting.genesets[representative.genesets,c("Significance", "Avr.NES_Proteomics", "Avr.NES_Transcriptomics")],
+                        which="col",
+                        col = list(Significance = 
+                                     c("Only.Proteomics" = "red",
+                                       "Only.Transcriptomics" = "blue",
+                                       "Both" = "green"),
+                                   Avr.NES_Proteomics = colorRamp2(c(-2, 0,2), 
+                                       c("blue",  "white","red")),
+                                   Avr.NES_Transcriptomics = 
+                                     colorRamp2(c(-2,0,2), 
+                                       c("blue", "white","red"))))
+
+ht <- Heatmap(t(ssGSEA.scaled.extended[representative.genesets,]), 
+              column_split = interesting.genesets[representative.genesets,"Subtype"],
+              cluster_column_slices = F,
+              cluster_row_slices = F,
+        top_annotation = row.ha, 
+        row_names_gp  = gpar(fontsize = 10),
+        row_split = Categories$`Subtype assignment`)
+draw(ht, annotation_legend_side="bottom",
+             heatmap_legend_side="bottom")
+
+```
+
+# Boxplot of ssGSEA results
+
+
+Only boxplot:
+
+```{r , fig.height=15, fig.width=15}
+row.names(interesting.genesets) <- interesting.genesets$GeneSet
+
+ssGSEA.duplum <- t(as.matrix(ssGSEA[c( "GOBP_CYTOKINE_MEDIATED_SIGNALING_PATHWAY"),]))
+row.names(ssGSEA.duplum) <- c("GOBP_CYTOKINE_MEDIATED_SIGNALING_PATHWAY.2")
+
+ssGSEA.extended <- rbind(ssGSEA, ssGSEA.duplum)
+ssGSEA.extended <- ssGSEA.extended[row.names(interesting.genesets),]
+
+
+ssGSEA.melted <- as.data.frame(ssGSEA.extended[representative.genesets,])
+ssGSEA.melted$Geneset <- row.names(ssGSEA.melted)
+ssGSEA.melted <- melt(ssGSEA.melted)
+colnames(ssGSEA.melted)[2:3] <- c("Sample", "ES")
+ssGSEA.melted <- merge(ssGSEA.melted, Categories, by="Sample")
+ssGSEA.melted$Subtype <- unlist(lapply(ssGSEA.melted$`Subtype assignment`, function(x){strsplit(x, split="-")[[1]][2]}))
+
+glist <- list()
+
+
+for (i in 1:length(representative.genesets)){
+  
+  g <- ggplot(ssGSEA.melted[ssGSEA.melted$Geneset ==representative.genesets[i],], 
+              aes(x=Subtype, y=ES, fill=Subtype))+ theme_bw()+# +geom_violin()  
+    scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+    scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+    geom_boxplot() + ylab("Enrichment Score")+xlab("")+
+    geom_beeswarm()+ ggtitle(representative.genesets[i], 
+                          subtitle = direction[i])+
+  theme(legend.position="none")+ 
+    theme(plot.title = element_text(size = 9),
+          plot.subtitle = element_text(size = 8))#+
+    #stat_compare_means(label = "p.signif")
+  glist[[i]] <- g
+}
+
+g <- grid.arrange(grobs=glist, ncol=6)
+
+#g
+#ggsave(file="Files/ssGSEA_TCGA.pdf", g, height = 15, width = 15)
+#ggsave(file="Files/ssGSEA_TCGA.svg", g, height = 15, width = 15)
+
+
+
+```
+
+
+Boxplot + violinplot:
+
+
+```{r , fig.height=15, fig.width=15}
+ssGSEA.melted <- as.data.frame(ssGSEA.extended[representative.genesets,])
+ssGSEA.melted$Geneset <- row.names(ssGSEA.melted)
+ssGSEA.melted <- melt(ssGSEA.melted)
+colnames(ssGSEA.melted)[2:3] <- c("Sample", "ES")
+ssGSEA.melted <- merge(ssGSEA.melted, Categories, by="Sample")
+ssGSEA.melted$Subtype <- unlist(lapply(ssGSEA.melted$`Subtype assignment`, function(x){strsplit(x, split="-")[[1]][2]}))
+
+glist <- list()
+
+
+for (i in 1:length(representative.genesets)){
+  
+  g <- ggplot(ssGSEA.melted[ssGSEA.melted$Geneset ==representative.genesets[i],], 
+              aes(x=Subtype, y=ES, fill=Subtype))+ theme_bw()+# +geom_violin()  
+    scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+    scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+    geom_boxplot(alpha=0.2)+
+    geom_violin(alpha=0.5) + ylab("Enrichment Score")+xlab("")+
+    geom_quasirandom()+ ggtitle(representative.genesets[i], 
+                          subtitle = direction[i])+
+  theme(legend.position="none")+ 
+    theme(plot.title = element_text(size = 9),
+          plot.subtitle = element_text(size = 8))#+
+    #stat_compare_means(label = "p.signif")
+  glist[[i]] <- g
+}
+
+g <- grid.arrange(grobs=glist, ncol=6)
+
+#g
+#ggsave(file="Files/ssGSEA_TCGA.pdf", g, height = 15, width = 15)
+#ggsave(file="Files/ssGSEA_TCGA.svg", g, height = 15, width = 15)
+
+
+
+```
+
+
+# Heatmap of mean ssGSEA scores across subtypes
+
+```{r , fig.width=8, fig.height=16}
+
+ssGSEA.scaled.extended.mean <- matrix(nrow=length(representative.genesets),
+                                        ncol=4)
+colnames(ssGSEA.scaled.extended.mean) <- c("A","N","P","Y")
+row.names(ssGSEA.scaled.extended.mean) <- representative.genesets.short.name2
+
+for (i in 1:nrow(ssGSEA.scaled.extended.mean)){
+  ssGSEA.scaled.extended.mean[i,1] <- mean(ssGSEA.scaled.extended[representative.genesets[i],
+                                                                      Categories[Categories$`Subtype assignment` =="SCLC-A","Sample"]], 
+                                               na.rm = T)
+  ssGSEA.scaled.extended.mean[i,2] <- mean(ssGSEA.scaled.extended[representative.genesets[i],
+                                                                      Categories[Categories$`Subtype assignment` =="SCLC-N","Sample"]], 
+                                               na.rm = T)
+  ssGSEA.scaled.extended.mean[i,3] <- mean(ssGSEA.scaled.extended[representative.genesets[i],
+                                                                      Categories[Categories$`Subtype assignment` =="SCLC-P","Sample"]], 
+                                               na.rm = T)
+  ssGSEA.scaled.extended.mean[i,4] <- mean(ssGSEA.scaled.extended[representative.genesets[i],
+                                                                      Categories[Categories$`Subtype assignment` =="SCLC-Y","Sample"]], 
+                                               na.rm = T)
+}
+
+
+ssGSEA.scaled.extended.mean.short <- ssGSEA.scaled.extended.mean[c("Subpallium development","Oxidative phosphorylation",
+                                "DNA replication","Cytokine signaling","Immune response","Neutrophil degranulation",
+                                "ECM organization","Epithelial mesenchymal transition","Response to growth factors",
+                                "Cell-substrate adhesion (prot.)","MAPK cascade","Apoptotic pathways",
+                                "Inflammatory response","DNA repair","Chromatin modification"),]
+subtype.specificity <- data.frame(GeneSet = c("Subpallium development","Oxidative phosphorylation",
+                                "DNA replication","Cytokine signaling","Immune response","Neutrophil degranulation",
+                                "ECM organization","Epithelial mesenchymal transition","Response to growth factors",
+                                "Cell-substrate adhesion (prot.)","MAPK cascade","Apoptotic pathways",
+                                "Inflammatory response","DNA repair","Chromatin modification"),
+                                Subtype = c(rep("A",2),rep("N",4),rep("Y",9)))
+
+row.ha = rowAnnotation(`Specificity` = subtype.specificity$Subtype,
+                       col=list("Specificity" = 
+                                  c("A"= "#0000FE", 
+                                    "N"= "#21FE06",
+                                    "Y"= "#FB02FE")))
+
+
+ht <- Heatmap(ssGSEA.scaled.extended.mean.short, 
+              cluster_column_slices = F,
+              col=colorRamp2(c(0.1,0.5,0.9), c("blue","white", "red")), 
+              cluster_row_slices = F,
+              cluster_columns = F,
+              cluster_rows = F,
+              column_names_rot = 0,
+              right_annotation = row.ha,
+              row_split = subtype.specificity$Subtype,
+              column_names_side = c("top"),
+              row_names_gp  = gpar(fontsize = 18),
+              column_names_gp = gpar(fontsize = 18),
+              show_column_dend = F, 
+              show_row_dend = F, 
+              show_column_names = T,
+              gap = unit(0.3, "cm"),
+              rect_gp = gpar(col = "black"),
+              border ="black",
+              height = unit(nrow(ssGSEA.scaled.extended.mean.short)*1.25,"cm"),
+              width = unit(4*1,"cm"))
+ht
+
+```
+
+
+
+```{r ,eval=FALSE}
+pdf(file="Figures/ssGSEA_George_short.pdf",width = 22, height = 8)
+ht
+dev.off()
+```
+

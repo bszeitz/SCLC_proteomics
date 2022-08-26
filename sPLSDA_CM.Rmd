@@ -1,5 +1,5 @@
 ---
-title: "sPLS-DA"
+title: "sPLS-DA on CM data"
 author: Beata Szeitz
 output:
   html_notebook:
@@ -9,7 +9,8 @@ output:
 # Load packages, functions and files
 
 ```{r }
-source("Install_load_packages.R")
+# R vs.4.2.0
+source("Load_packages.R")
 source("Utility_functions.R")
 source("Color_list.R")
 ```
@@ -17,19 +18,12 @@ source("Color_list.R")
 ```{r Load files}
 Annot <- read_in_with_rowname("Files/Annotation",F)
 row.names(Annot) <- Annot$Sample
-CP.expr.imp <- read_in_with_rowname("Files/CP_expression_filtered_imputed",F)[,Annot$Sample]
 CM.expr.imp <- read_in_with_rowname("Files/CM_expression_filtered_imputed",F)[,Annot$Sample]
-Secreted.proteins <- read_in_with_rowname("Files/Tier1_and_2_secreted",F)[,1]
-CM.expr.imp.secr <- CM.expr.imp[row.names(CM.expr.imp) %in% Secreted.proteins,]
 ```
 
 
 ```{r }
-row.names(CP.expr.imp) <- paste(row.names(CP.expr.imp), "CP", sep="_")
-row.names(CM.expr.imp.secr) <- paste(row.names(CM.expr.imp.secr), "CM", sep="_")
-
-
-X.Both <- scale(t(rbind(CP.expr.imp, CM.expr.imp.secr)))
+X.Both <- scale(t(CM.expr.imp))
 Y <- Annot$Subtype
 ```
 
@@ -54,10 +48,10 @@ plotIndiv(pca.Both, group = Y, ind.names = FALSE,
 Both.plsda <- plsda(X.Both, Y, ncomp = 10)  # set ncomp to 10 for performance assessment later
 plotIndiv(Both.plsda , comp = 1:2,
           group = Y, ind.names = FALSE, 
-          ellipse = TRUE, legend = TRUE, title = 'PLSDA on Both')
+          ellipse = TRUE, legend = TRUE, title = 'PLSDA')
 plotIndiv(Both.plsda , comp = c(1,3),
           group = Y, ind.names = FALSE, 
-          ellipse = TRUE, legend = TRUE, title = 'PLSDA on Both')
+          ellipse = TRUE, legend = TRUE, title = 'PLSDA')
 
 ```
 
@@ -80,14 +74,15 @@ plotIndiv(Both.plsda, comp = c(1,3),
 set.seed(2543) # for reproducibility, only when the `cpus' argument is not used
 #perf.plsda.Both <- perf(Both.plsda, validation = "Mfold", folds = 3, 
 #                  progressBar = T, auc = TRUE, nrepeat = 10) 
-#save(perf.plsda.Both, file="RData/perf_plsda_Both.RData")
-load("RData/perf_plsda_Both.RData")
+#save(perf.plsda.Both, file="RData/perf_plsda_CMimp.RData")
+load("RData/perf_plsda_CMimp.RData")
 # perf.plsda.srbct$error.rate  # error rates
 plot(perf.plsda.Both, col = color.mixo(5:7), sd = TRUE, legend.position = "horizontal")
+perf.plsda.Both$error.rate
 ```
 
 ```{r }
-pdf(file="Figures/PLSDA_performance_plot.pdf",width = 7, height = 5)
+pdf(file="Figures/PLSDA_performance_plot_CM.pdf",width = 7, height = 5)
 plot(perf.plsda.Both, col = color.mixo(5:7), sd = TRUE, legend.position = "horizontal")
 dev.off()
 
@@ -108,12 +103,12 @@ list.keepX <- c(1:9,  seq(10, 80, 5))
 
 set.seed(2543) # for reproducibility here,
 # to speed up the computational time, consider the cpu argument
-#tune.splsda.Both <- tune.splsda(X.Both, Y, ncomp = 5, validation = 'Mfold', 
+#tune.splsda.Both <- tune.splsda(X.Both, Y, ncomp = 4, validation = 'Mfold', 
 #                                 folds = 3, 
 #                           progressBar = TRUE, dist = 'centroids.dist', measure = "BER",
 #                          test.keepX = list.keepX, nrepeat = 50, cpus = 4)
-#save(tune.splsda.Both, file="RData/tune_splsda_Both.RData")
-load("RData/tune_splsda_Both.RData")
+#save(tune.splsda.Both, file="RData/tune_splsda_CMimp.RData")
+load("RData/tune_splsda_CMimp.RData")
 ```
 
 
@@ -130,7 +125,7 @@ select.keepX
 
 
 ```{r }
-plot(tune.splsda.Both, col = color.jet(5))
+plot(tune.splsda.Both, col = color.jet(4))
 
 ```
 
@@ -147,28 +142,28 @@ plotIndiv(splsda.Both, comp = c(1,2),
           ellipse = TRUE, legend = TRUE,
           title = 'sPLS-DA, comp 1 & 2')
 
-plotIndiv(splsda.Both, comp = c(1,3),
-          group = Y, ind.names = FALSE, 
-          ellipse = TRUE, legend = TRUE,
-          title = 'sPLS-DA, comp 1 & 3')
+#plotIndiv(splsda.Both, comp = c(1,3),
+#          group = Y, ind.names = FALSE, 
+#          ellipse = TRUE, legend = TRUE,
+#          title = 'sPLS-DA, comp 1 & 3')
 
 ```
 
 
 ```{r }
-pdf(file="Figures/sPLSDA_components12.pdf",width = 7, height = 5)
+pdf(file="Figures/sPLSDA_components12_CM.pdf",width = 7, height = 5)
 plotIndiv(splsda.Both, comp = c(1,2),
           group = Y, ind.names = FALSE, 
           ellipse = TRUE, legend = TRUE,
           title = 'sPLS-DA, comp 1 & 2')
 dev.off()
 
-pdf(file="Figures/sPLSDA_components13.pdf",width = 7, height = 5)
-plotIndiv(splsda.Both, comp = c(1,3),
-          group = Y, ind.names = FALSE, 
-          ellipse = TRUE, legend = TRUE,
-          title = 'sPLS-DA, comp 1 & 3')
-dev.off()
+#pdf(file="Figures/sPLSDA_components13_CP.pdf",width = 7, height = 5)
+#plotIndiv(splsda.Both, comp = c(1,3),
+#          group = Y, ind.names = FALSE, 
+#          ellipse = TRUE, legend = TRUE,
+#          title = 'sPLS-DA, comp 1 & 3')
+#dev.off()
 
 ```
 
@@ -180,8 +175,8 @@ set.seed(40) # for reproducibility, only when the `cpus' argument is not used
 #perf.Both <- perf(splsda.Both, validation = "Mfold", folds = 3,
 #                  dist = 'centroids.dist', nrepeat = 100, cpus = 2,
 #                   progressBar = T) 
-#save(perf.Both, file="RData/splsda_perf_Both.RData")
-load("RData/splsda_perf_Both.RData")
+#save(perf.Both, file="RData/splsda_perf_Both_CMimp.RData")
+load("RData/splsda_perf_Both_CMimp.RData")
 
 ```
 
@@ -195,7 +190,7 @@ plot(perf.Both, col = color.mixo(5))
 ```
 
 ```{r }
-pdf(file="Figures/sPLSDA_classification_perf.pdf",width = 7, height = 5)
+pdf(file="Figures/sPLSDA_classification_perf_CM.pdf",width = 7, height = 5)
 plot(perf.Both, col = color.mixo(5))
 dev.off()
 ```
@@ -207,8 +202,8 @@ plot(perf.Both$features$stable[[1]], type = 'h', ylab = 'Stability',
      xlab = 'Features', main = 'Comp 1', las =2)
 plot(perf.Both$features$stable[[2]], type = 'h', ylab = 'Stability', 
      xlab = 'Features', main = 'Comp 2', las =2)
-plot(perf.Both$features$stable[[3]], type = 'h', ylab = 'Stability', 
-     xlab = 'Features', main = 'Comp 3', las =2)
+#plot(perf.Both$features$stable[[3]], type = 'h', ylab = 'Stability', 
+#     xlab = 'Features', main = 'Comp 3', las =2)
 
 ```
 
@@ -264,22 +259,22 @@ Both.comp2.selected
 
 ```{r }
 # here we match the selected variables to the stable features
-ind.match = match(selectVar(splsda.Both, comp = 3)$name, 
-                  names(perf.Both$features$stable[[3]]))
+#ind.match = match(selectVar(splsda.Both, comp = 3)$name, 
+#                  names(perf.Both$features$stable[[3]]))
 #extract the frequency of selection of those selected variables
-Freq = as.numeric(perf.Both$features$stable[[3]][ind.match])
+#Freq = as.numeric(perf.Both$features$stable[[3]][ind.match])
 
 #data.frame(selectVar(splsda.Both, comp = 3)$value, Freq)
 
-Both.comp3.selected <- data.frame(selectVar(splsda.Both, comp = 3)$value, Freq)
-Both.comp3.selected$Rank <- Both.comp3.selected$value.var * Both.comp3.selected$Freq
-Both.comp3.selected$Sign <- ifelse(Both.comp3.selected$Rank > 0, "pos", "neg")
-Both.comp3.selected$Comp <- 3
-Both.comp3.selected$Accession <- row.names(Both.comp3.selected)
+#Both.comp3.selected <- data.frame(selectVar(splsda.Both, comp = 3)$value, Freq)
+#Both.comp3.selected$Rank <- Both.comp3.selected$value.var * Both.comp3.selected$Freq
+#Both.comp3.selected$Sign <- ifelse(Both.comp3.selected$Rank > 0, "pos", "neg")
+#Both.comp3.selected$Comp <- 3
+#Both.comp3.selected$Accession <- row.names(Both.comp3.selected)
 
-Both.comp3.selected <- Both.comp3.selected[order(abs(Both.comp3.selected$Rank), decreasing = T),]
+#Both.comp3.selected <- Both.comp3.selected[order(abs(Both.comp3.selected$Rank), decreasing = T),]
 
-Both.comp3.selected
+#Both.comp3.selected
 
 ```
 
@@ -289,18 +284,18 @@ plotLoadings(splsda.Both, comp = 1, title = 'Loadings on comp 1',
              contrib = 'max', method = 'median')
 plotLoadings(splsda.Both, comp = 2, title = 'Loadings on comp 2', 
              contrib = 'max', method = 'median')
-plotLoadings(splsda.Both, comp = 3, title = 'Loadings on comp 3', 
-             contrib = 'max', method = 'median')
+#plotLoadings(splsda.Both, comp = 3, title = 'Loadings on comp 3', 
+#             contrib = 'max', method = 'median')
 plotLoadings(splsda.Both, comp = 1, title = 'Loadings on comp 1', 
              contrib = 'max', method = 'mean')
 plotLoadings(splsda.Both, comp = 2, title = 'Loadings on comp 2', 
              contrib = 'max', method = 'mean')
-plotLoadings(splsda.Both, comp = 3, title = 'Loadings on comp 3', 
-             contrib = 'max', method = 'mean')
+#plotLoadings(splsda.Both, comp = 3, title = 'Loadings on comp 3', 
+#             contrib = 'max', method = 'mean')
 ```
 
 ```{r }
-plotArrow(splsda.Both, legend=T)
+#plotArrow(splsda.Both, legend=T)
 plotVar(splsda.Both)
 ```
 
@@ -317,14 +312,14 @@ Both.comp1.selected[abs(Both.comp1.selected$Rank) > 0.1,]
 nrow(Both.comp2.selected[abs(Both.comp2.selected$Rank) > 0.1,])
 Both.comp2.selected[abs(Both.comp2.selected$Rank) > 0.1,]
 
-Both.comp3.selected
+#Both.comp3.selected
 
 ```
 
 
 ```{r }
-Both.comp.selected <- rbind(Both.comp1.selected, Both.comp2.selected, Both.comp3.selected)
+Both.comp.selected <- rbind(Both.comp1.selected, Both.comp2.selected) #, Both.comp3.selected)
 
-export_with_rowname(Both.comp.selected, "Files/sPLSDA_results",F)
+export_with_rowname(Both.comp.selected, "Files/sPLSDA_results_CM",F)
 
 ```

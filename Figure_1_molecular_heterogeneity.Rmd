@@ -1,0 +1,191 @@
+---
+title: "Figure 1"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+```{r }
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+ 
+# Known subtype markers
+
+```{r , fig.width=10, fig.height=5}
+Protein.Annot <- read_in_with_rowname("Files/Secreted_surface_plasma_druggable_info",F)
+Protein.Annot$Accession <- Protein.Annot$Protein
+row.names(Protein.Annot) <- Protein.Annot$Protein
+
+markers.to.show <- c("CHGA","ANTXR1","AVIL","ITGA5")
+markers.to.show <- Protein.Annot[Protein.Annot$Gene %in% markers.to.show,
+                                                              c("Protein","Gene")]
+
+
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+CP.expr <- read_in_with_rowname("Files/CP_expression_full",F)[,Annot$Sample]
+
+Markers.melt <- CP.expr[markers.to.show$Protein,]
+Markers.melt <- as.data.frame(t(scale(t(Markers.melt))))
+Markers.melt$Gene <- markers.to.show$Gene
+Markers.melt$Protein <- markers.to.show$Protein
+
+Markers.melt <-   reshape2::melt(Markers.melt)
+
+colnames(Markers.melt)[3:4] <- c("Sample", "Z.score")
+
+Markers.melt <- merge(Markers.melt, Annot[,c("Sample","Subtype")], by="Sample")
+Markers.melt$Subtype <- unlist(lapply(Markers.melt$Subtype, function(x){strsplit(x, split="-")[[1]][2]}))
+Markers.melt$Gene <- factor(Markers.melt$Gene, levels = c("CHGA","ANTXR1","AVIL","ITGA5"))
+
+my.comparisons <- list( c("N", "A"),c("P", "A"), c("N", "P"), c("Y", "A"), c("Y", "N"), c("Y", "P") )
+
+g <- ggplot(Markers.melt, aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+
+  ylab("Z score")+xlab("")+#geom_beeswarm()+
+  #geom_violin(alpha=0.5) + 
+  geom_boxplot()+
+  #stat_compare_means(size = 2.5)+
+  theme(legend.position="none")+
+  #scale_y_continuous(limits = c(-7.5,7.5), breaks = round(seq(-7,7)),1)+
+  stat_compare_means(comparisons = my.comparisons,size = 5)+
+  theme(legend.position="none", strip.text = element_text(size=15), axis.text=element_text(size=15))
+g2 <- g+ facet_wrap(Gene ~ ., ncol=4) #, scales = "free")
+g2
+
+
+```
+
+
+```{r , fig.width=10, fig.height=3}
+g <- ggplot(Markers.melt, aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+
+  ylab("Z score")+xlab("")+#geom_beeswarm()+
+  #geom_violin(alpha=0.5) + 
+  geom_boxplot()+
+  #stat_compare_means(size = 2.5)+
+  theme(legend.position="none")+
+  #scale_y_continuous(limits = c(-7.5,7.5), breaks = round(seq(-7,7)),1)+
+  stat_compare_means(comparisons = my.comparisons,size = 5, label="p.signif")+
+  theme(legend.position="none", strip.text = element_text(size=15), axis.text=element_text(size=15))
+g2 <- g+ facet_wrap(Gene ~ ., ncol=4, scales = "free")
+g2
+ggsave(g2, file="Figures/4_known_markers.pdf")
+
+
+```
+
+# NE and EMT scores
+
+```{r}
+loaded <- load("RData/NE_scores_heatmap.RData")
+loaded
+```
+
+
+
+
+
+```{r , fig.width=15, fig.height=4}
+
+draw(Heatmap(Avr.NE.values,
+                     name="Avr. Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = column.ha.NEscore, 
+             column_split = Annot.NEscore$Subtype, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             cluster_column_slices = F,
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+
+```
+
+
+
+```{r }
+
+pdf(file="Figures/NE_scores_heatmap.pdf",width = 15, height = 4)
+draw(Heatmap(Avr.NE.values,
+                     name="Avr. Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = column.ha.NEscore, 
+             column_split = Annot.NEscore$Subtype, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             cluster_column_slices = F,
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+dev.off()
+
+```
+
+
+```{r}
+loaded <- load("RData/EMT_scores_heatmap.RData")
+loaded
+```
+
+
+```{r , fig.width=15, fig.height=4}
+
+draw(Heatmap(Avr.EMT.values, 
+                     name="Avr. Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = column.ha.EMTscore, 
+             column_split = Annot.EMTscore$Subtype, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             cluster_column_slices = F,
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+```
+
+
+
+```{r }
+
+pdf(file="Figures/EMT_scores_heatmap.pdf",width = 15, height = 4)
+draw(Heatmap(Avr.EMT.values, 
+                     name="Avr. Z-score",
+             col=colorRamp2(c(-2, 0, 2), c("blue","white", "red")),
+                     cluster_rows = F, top_annotation = column.ha.EMTscore, 
+             column_split = Annot.EMTscore$Subtype, 
+             cluster_columns = T,
+             show_row_names = T, 
+             show_heatmap_legend = T, 
+             cluster_column_slices = F,
+             row_title_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(2, "mm"),
+             heatmap_width = unit(15, "cm")),
+             annotation_legend_side="right",
+             heatmap_legend_side="right")
+dev.off()
+```
+
+
+
+
+

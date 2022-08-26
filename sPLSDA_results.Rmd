@@ -1,0 +1,864 @@
+---
+title: "Examine sPLS-DA results"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+# Load packages, functions and files
+
+
+```{r }
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+
+
+```{r }
+Annot <- read_in_with_rowname("Files/Annotation",F)
+row.names(Annot) <- Annot$Sample
+
+CP.expr <- t(scale(t(read_in_with_rowname("Files/CP_expression_filtered_imputed",F))))[,Annot$Sample]
+CM.expr <- t(scale(t(read_in_with_rowname("Files/CM_expression_filtered_imputed",F))))[,Annot$Sample]
+
+CP.expr.full <- t(scale(t(read_in_with_rowname("Files/CP_expression_full",F))))[,Annot$Sample]
+CM.expr.full <- t(scale(t(read_in_with_rowname("Files/CM_expression_full",F))))[,Annot$Sample]
+
+Protein.Annot <- read_in_with_rowname("Files/Secreted_surface_plasma_druggable_info",F)
+Protein.Annot$Accession <- Protein.Annot$Protein
+row.names(Protein.Annot) <- Protein.Annot$Protein
+
+
+nrow(Protein.Annot[Protein.Annot$Protein %in% row.names(CP.expr.full) &
+                Protein.Annot$Surface=="*",])
+nrow(Protein.Annot[Protein.Annot$Protein %in% row.names(CM.expr.full) &
+                Protein.Annot$Surface=="*",])
+nrow(Protein.Annot[Protein.Annot$Protein %in% row.names(CP.expr) &
+                Protein.Annot$Surface=="*",])
+nrow(Protein.Annot[Protein.Annot$Protein %in% row.names(CM.expr) &
+                Protein.Annot$Surface=="*",])
+
+```
+
+
+```{r }
+sPLS.DA.CP <- read_in_with_rowname("Files/sPLSDA_results_CP",T)
+sPLS.DA.CP <- merge(sPLS.DA.CP, Protein.Annot, by="Accession")
+#sPLS.DA.CP <- sPLS.DA.CP[sPLS.DA.CP$Freq > 0.4,]
+sPLS.DA.CM <- read_in_with_rowname("Files/sPLSDA_results_CM",T)
+sPLS.DA.CM <- merge(sPLS.DA.CM, Protein.Annot, by="Accession")
+#sPLS.DA.CM <- sPLS.DA.CM[sPLS.DA.CM$Freq > 0.4,]
+sPLS.DA.CP[sPLS.DA.CP==""] <- "."
+sPLS.DA.CM[sPLS.DA.CM==""] <- "."
+
+CP.expr.imp.sPLSDA <- CP.expr[sPLS.DA.CP$Accession,]
+row.names(CP.expr.imp.sPLSDA) <- Protein.Annot[sPLS.DA.CP$Accession,"Gene"]
+CM.expr.imp.sPLSDA <- CM.expr[sPLS.DA.CM$Accession,]
+row.names(CM.expr.imp.sPLSDA) <- Protein.Annot[sPLS.DA.CM$Accession,"Gene"]
+
+```
+
+# Visualize all results on a heatmap
+
+
+Generate heatmap annotations:
+
+```{r }
+row.ha.CP <- rowAnnotation(df =sPLS.DA.CP[,c("Secreted","Surface","Plasma.detect","Blood.secr","Druggable")],
+                              col=list(Secreted = c("*" = "lightblue",
+                                                    "." = "white"),
+                                       Surface = c("*" = "darkorange",
+                                                   "." = "white"),
+                                       Plasma.detect = c("*" = "#d9b99b",
+                                                         "." = "white"),
+                                       Blood.secr = c("*" = "darkred",
+                                                      "." = "white"),
+                                       Druggable = c("Enzyme" = "darkblue",
+                                                     "." = "white")),
+                           `Loading\nWeight` = anno_barplot(sPLS.DA.CP$value.var,
+                                                            gp = gpar(fill = ifelse(abs(sPLS.DA.CP$value.var) > 0.2, 2,0)), 
+                                                            ylim = c(-1,1),add_numbers=F,
+                                                            width = unit(2, "cm")),
+                           `Freq\n(Stability)` = anno_barplot(sPLS.DA.CP$Freq,
+                                                              gp = gpar(fill = ifelse(sPLS.DA.CP$Freq > 0.4, 2,0)), 
+                                                              ylim = c(0,1),add_numbers=F,
+                                                              width = unit(1, "cm")),
+                           gp = gpar(col = "lightgrey"),
+                           annotation_width = c(unit(2, "cm"), unit(1, "cm"),rep(unit(0.1, "cm"),5)),
+                           gap = unit(c(2,4,2.5,2.5,2.5,2.5), 'mm'),
+                              show_legend = FALSE,
+                              show_annotation_name = FALSE)
+
+
+
+row.ha.CM <- rowAnnotation(df =sPLS.DA.CM[,c("Secreted","Surface","Plasma.detect","Blood.secr","Druggable")],
+                           col=list(Secreted = c("*" = "lightblue",
+                                                 "." = "white"),
+                                    Surface = c("*" = "darkorange",
+                                                "." = "white"),
+                                    Plasma.detect = c("*" = "#d9b99b",
+                                                      "." = "white"),
+                                    Blood.secr = c("*" = "darkred",
+                                                   "." = "white"),
+                                    Druggable = c("Enzyme" = "darkblue",
+                                                  "." = "white")),
+                           `Loading\nWeight` = anno_barplot(sPLS.DA.CM$value.var,
+                                                            gp = gpar(fill = ifelse(abs(sPLS.DA.CM$value.var) > 0.2, 2,0)), 
+                                                            ylim = c(-1,1),
+                                                            width = unit(2, "cm")),
+                           `Freq\n(Stability)` = anno_barplot(sPLS.DA.CM$Freq,
+                                                              gp = gpar(fill = ifelse(sPLS.DA.CM$Freq > 0.4, 2,0)), 
+                                                              ylim = c(0,1),
+                                                              width = unit(1, "cm")),   
+                           annotation_width = c(unit(2, "cm"), unit(1, "cm"),rep(unit(0.1, "cm"),5)),
+                           gap = unit(c(2,4,2.5,2.5,2.5,2.5), 'mm'),
+                           gp = gpar(col = "lightgrey"),
+                           show_legend = FALSE,
+                           show_annotation_name = TRUE)
+
+```
+
+
+The common protein btw CP and CM is LGALS1
+
+```{r }
+
+intersect(row.names(CP.expr.imp.sPLSDA), row.names(CM.expr.imp.sPLSDA))
+
+```
+
+
+Generate the heatmap:
+
+```{r , fig.width=15, fig.height=20}
+
+set.seed(12345)
+ht.CP <- Heatmap(CP.expr.imp.sPLSDA,
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+                     cluster_rows = T, 
+             column_split = Annot$Subtype,  
+             cluster_column_slices = FALSE,
+             cluster_columns = T,
+             clustering_method_columns = "complete",
+             clustering_method_rows = "complete",
+             left_annotation = row.ha.CP,
+             show_row_dend = F,
+             show_row_names = T,
+             column_gap = unit(0.1, "cm"),
+             column_names_gp = gpar(fontsize = 10),
+             gap = unit(0.1, "cm"),
+             rect_gp = gpar(col = "grey"),
+             border =T,
+             show_heatmap_legend = T,
+             show_column_names = T,
+             row_names_gp = gpar(fontsize = 10),
+             height = unit(nrow(CP.expr.imp.sPLSDA)*0.4, "cm"),
+             width = unit(ncol(CP.expr.imp.sPLSDA)*0.5, "cm"))
+#ht.CP
+
+ht.CM <- Heatmap(CM.expr.imp.sPLSDA,
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+                     cluster_rows = T,
+             column_split = Annot$Subtype,  
+             cluster_column_slices = FALSE,
+             cluster_columns = T,
+             clustering_method_columns = "complete",
+             clustering_method_rows = "complete",
+             show_row_dend = F,
+             left_annotation = row.ha.CM,
+             show_row_names = T,
+             column_gap = unit(0.1, "cm"),
+             column_names_gp = gpar(fontsize = 10),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(0.1, "cm"),
+             rect_gp = gpar(col = "grey"),
+             border =T,
+             show_heatmap_legend = T,
+             show_column_names = T,
+             height = unit(nrow(CM.expr.imp.sPLSDA)*0.4, "cm"),
+             width = unit(ncol(CM.expr.imp.sPLSDA)*0.5, "cm"))
+
+ht <- ht.CP %v% ht.CM
+draw(ht, annotation_legend_side="left",
+             heatmap_legend_side="left",
+     gap = unit(10, "mm"))
+```
+
+
+```{r , eval=FALSE}
+pdf(file="Figures/sPLSDA_full.pdf",width = 15, height = 20)
+draw(ht, annotation_legend_side="left",
+             heatmap_legend_side="left",
+     gap = unit(10, "mm"))
+dev.off()
+
+```
+
+
+## Export sPLS-DA results
+
+
+```{r }
+sPLS.DA.CP$Direction <- ""
+
+for (i in 1:nrow(sPLS.DA.CP)){
+  if (sPLS.DA.CP$Comp[i]==3){
+    sPLS.DA.CP$Direction[i] <- "UP in P"
+  } else if (sPLS.DA.CP$Comp[i]==2 & sPLS.DA.CP$Sign[i]=="pos"){
+    sPLS.DA.CP$Direction[i] <- "UP in NvsA"
+  } else if (sPLS.DA.CP$Comp[i]==2 & sPLS.DA.CP$Sign[i]=="neg"){
+    sPLS.DA.CP$Direction[i] <- "UP in AvsN"
+  } else if (sPLS.DA.CP$Comp[i]==1 & sPLS.DA.CP$Sign[i]=="neg"){
+    sPLS.DA.CP$Direction[i] <- "DN in Y"
+  } else if (sPLS.DA.CP$Comp[i]==1 & sPLS.DA.CP$Sign[i]=="pos"){
+    sPLS.DA.CP$Direction[i] <- "UP in Y"
+  }
+}
+
+sPLS.DA.CM$Direction <- ""
+
+for (i in 1:nrow(sPLS.DA.CM)){
+  if (sPLS.DA.CM$Comp[i]==1 & sPLS.DA.CM$Sign[i]=="pos"){
+    sPLS.DA.CM$Direction[i] <- "UP in Y"
+  } else if (sPLS.DA.CM$Comp[i]==1 & sPLS.DA.CM$Sign[i]=="neg"){
+    sPLS.DA.CM$Direction[i] <- "DN in Y"
+  } else if (sPLS.DA.CM$Comp[i]==2 & sPLS.DA.CM$Sign[i]=="pos"){
+    sPLS.DA.CM$Direction[i] <- "UP in AvsN"
+  } else if (sPLS.DA.CM$Comp[i]==2 & sPLS.DA.CM$Sign[i]=="neg"){
+    sPLS.DA.CM$Direction[i] <- "UP in NvsA"
+  }
+}
+
+
+```
+
+
+
+```{r }
+summary(factor(sPLS.DA.CP$Direction))
+summary(factor(sPLS.DA.CM$Direction))
+
+```
+
+
+```{r }
+
+sPLS.DA.export <- rbind(sPLS.DA.CP, sPLS.DA.CM)
+sPLS.DA.export$Data <- c(rep("CP",nrow(sPLS.DA.CP)),rep("CM",nrow(sPLS.DA.CM)))
+
+sPLS.DA.export <- sPLS.DA.export[,c("Accession","Gene", "Data", "Direction",
+                  "Secreted","Surface", "Plasma.detect","Blood.secr", "Druggable", 
+                  "value.var","Freq","Rank","Sign","Comp")]
+colnames(sPLS.DA.export)[grep("value.var",colnames(sPLS.DA.export))] <- "Loading.Weight"
+
+sPLS.DA.export[sPLS.DA.export=="."] <- ""
+
+```
+
+
+```{r }
+
+
+wb <- createWorkbook(
+  title = NULL,
+)
+sheetnames <- c("sPLSDA_results")
+sheets <- list(sPLS.DA.export)
+
+for (i in 1:length(sheets)) {
+  addWorksheet(wb, sheetnames[i])
+  writeData(
+    wb = wb,
+    sheet = sheetnames[i],
+    x = sheets[[i]])
+}
+#saveWorkbook(wb, paste0("Files/Supplementary_sPLSDA.xlsx"), overwrite = TRUE)
+
+
+
+
+```
+
+
+# Load tissue transcriptomics data
+
+```{r }
+George.Zscore <- read_in_with_rowname("Files/George_expression_Zscores",F)
+Annot.George <- read_in_with_rowname("Files/George_annotation",F)
+colnames(Annot.George)[2] <- "Subtype"
+row.names(Annot.George) <- Annot.George$Sample
+
+```
+
+
+Select transcripts with the highest FPKM value for each gene:
+```{r }
+George.FPKM <- read_in_with_rowname("Files/George_expression_FPKM",F)
+all(row.names(George.FPKM) == row.names(George.Zscore))
+FPKM.values <- data.frame(Row.name = row.names(George.FPKM),
+                          Gene = sapply(strsplit(row.names(George.FPKM), split="_"),"[[",1),
+                          Sum.FPKM = apply(George.FPKM, 1, sum, na.rm=T),
+                          Mean.FPKM = apply(George.FPKM, 1, mean, na.rm=T),
+                          SD.FPKM = apply(George.FPKM, 1, sd, na.rm=T))
+
+highest.fpkm <- vector()
+
+all.genes <- unique(FPKM.values$Gene)
+
+i=2
+for (i in 1:length(all.genes)){
+  gene.fpkm <- FPKM.values[FPKM.values$Gene == all.genes[i],]
+  gene.fpkm <- gene.fpkm[order(gene.fpkm$Sum.FPKM, decreasing = T),]
+  highest.fpkm <- append(highest.fpkm, gene.fpkm$Row.name[1])
+}
+FPKM.values$Gene <- NULL
+
+George.Zscore <- George.Zscore[highest.fpkm,]
+```
+
+
+Create long format of the table, include the expression pattern detected in proteomics:
+
+```{r }
+George.Zscore.melt <- melt(as.matrix(George.Zscore))
+colnames(George.Zscore.melt) <- c("Row.name", "Sample", "Z.score")
+sapply(George.Zscore.melt, class)
+George.Zscore.melt$Row.name <- unfactor(George.Zscore.melt$Row.name)
+George.Zscore.melt$Sample <- unfactor(George.Zscore.melt$Sample)
+
+George.Zscore.melt$Gene <- sapply(strsplit(George.Zscore.melt$Row.name, split="_"),"[[",1)
+
+George.Zscore.melt <- merge(George.Zscore.melt, Annot.George, by="Sample")
+George.Zscore.melt <- merge(George.Zscore.melt, FPKM.values, by="Row.name")
+
+```
+
+
+```{r }
+sPLSDA.genes <- unique(c(sPLS.DA.CM$Gene, sPLS.DA.CP$Gene))
+George.Zscore.melt.sPLSDA <- George.Zscore.melt[George.Zscore.melt$Gene %in% sPLSDA.genes,]
+
+for (i in 1:nrow(George.Zscore.melt.sPLSDA)){
+  if (George.Zscore.melt.sPLSDA$Gene[i] =="LGALS1"){
+    George.Zscore.melt.sPLSDA$Data[i] <- "CP&CM"
+    George.Zscore.melt.sPLSDA$Direction[i] <- sPLS.DA.CP[sPLS.DA.CP$Gene == "LGALS1","Direction"]
+  } else if (George.Zscore.melt.sPLSDA$Gene[i] %in% sPLS.DA.CP$Gene){
+    George.Zscore.melt.sPLSDA$Data[i] <- "CP"
+    George.Zscore.melt.sPLSDA$Direction[i] <- sPLS.DA.CP[sPLS.DA.CP$Gene == George.Zscore.melt.sPLSDA$Gene[i],"Direction"]
+  } else {
+    George.Zscore.melt.sPLSDA$Data[i] <- "CM"
+    George.Zscore.melt.sPLSDA$Direction[i] <- sPLS.DA.CM[sPLS.DA.CM$Gene == George.Zscore.melt.sPLSDA$Gene[i],"Direction"]
+  }
+}
+
+George.Zscore.melt.sPLSDA$Subtype <- gsub("SCLC-","",George.Zscore.melt.sPLSDA$Subtype)
+
+for (i in 1:nrow(George.Zscore.melt.sPLSDA)){
+  George.Zscore.melt.sPLSDA$Label[i] <- paste0(George.Zscore.melt.sPLSDA$Row.name[i], 
+                                               "\nAv.FPKM=",round(George.Zscore.melt.sPLSDA$Mean.FPKM[i],0),
+                                               "\nTrend=",George.Zscore.melt.sPLSDA$Direction[i])
+}
+
+
+```
+
+
+# Check alignment btw tissue transcriptomics and cell line proteomics
+
+Perform Kruskal-Wallis tests and filter for those that have KW p < 0.15 (this has no effect on the top matching markers)
+
+```{r }
+George.Zscore.sPLSDA <- George.Zscore[row.names(George.Zscore) %in% George.Zscore.melt.sPLSDA$Row.name,]
+colnames(George.Zscore.sPLSDA) == Annot.George$Sample
+
+George.Zscore.sPLSDA.KW <- Kruskal_posthoc_adj(annotation = Annot.George, colname_for_factor = "Subtype",
+                                   levelOrder = c("SCLC-A", "SCLC-N", "SCLC-P", "SCLC-Y"), m = George.Zscore.sPLSDA, min.perc.in.group = 0.7)
+George.Zscore.sPLSDA.KW$Gene <- sapply(strsplit(George.Zscore.sPLSDA.KW$Accession, split="_"),"[[",1)
+
+George.Zscore.sPLSDA.KW[George.Zscore.sPLSDA.KW$Gene=="LGALS1",]
+
+George.Zscore.sPLSDA.KW.sign <- George.Zscore.sPLSDA.KW[George.Zscore.sPLSDA.KW$`p.v Subtype_` < 0.15,]
+```
+
+
+Include direction in the table (i.e. the expected pattern based on proteomics), mark those transcripts that show the expected tendency and are borderline significant:
+
+```{r }
+for (i in 1:nrow(George.Zscore.sPLSDA.KW.sign)){
+  George.Zscore.sPLSDA.KW.sign$Direction[i] <- unique(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene==
+                                                                                  George.Zscore.sPLSDA.KW.sign$Gene[i],
+                                                                                "Direction"])
+  
+  George.Zscore.sPLSDA.KW.sign$Confirmed[i] <- ""
+  if (George.Zscore.sPLSDA.KW.sign$Direction[i] =="UP in P" &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-P-SCLC-A)_`[i] < 0.15 &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-P-SCLC-N)_`[i] < 0.15 &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-Y-SCLC-P)_`[i] < 0.15){
+    George.Zscore.sPLSDA.KW.sign$Confirmed[i] <- "*"
+  }
+  if (George.Zscore.sPLSDA.KW.sign$Direction[i] =="UP in Y" &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-Y-SCLC-A)_`[i] < 0.15 &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-Y-SCLC-N)_`[i] < 0.15 &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-Y-SCLC-P)_`[i] < 0.15){
+    George.Zscore.sPLSDA.KW.sign$Confirmed[i] <- "*"
+  }
+  if (George.Zscore.sPLSDA.KW.sign$Direction[i] =="UP in AvsN" &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-N-SCLC-A)_`[i] < 0.15 &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-Y-SCLC-A)_`[i] > 0.15 &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-P-SCLC-A)_`[i] > 0.15){
+    George.Zscore.sPLSDA.KW.sign$Confirmed[i] <- "*"
+  }
+  
+  if (George.Zscore.sPLSDA.KW.sign$Direction[i] =="UP in NvsA" &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-N-SCLC-A)_`[i] < 0.15 &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-Y-SCLC-N)_`[i] > 0.15 &
+      George.Zscore.sPLSDA.KW.sign$`wilcox(SCLC-P-SCLC-N)_`[i] > 0.15){
+    George.Zscore.sPLSDA.KW.sign$Confirmed[i] <- "*"
+  }
+  
+}
+
+confirmed <- unique(George.Zscore.sPLSDA.KW.sign[George.Zscore.sPLSDA.KW.sign$Confirmed =="*","Gene"])
+
+```
+
+
+Filter for the best transcripts matching with proteomic results:
+
+```{r }
+# UP in A vs N
+UP.in.AvsN.Rank <- George.Zscore.sPLSDA.KW.sign[George.Zscore.sPLSDA.KW.sign$Direction=="UP in AvsN",]
+UP.in.AvsN.Rank$Rank <- UP.in.AvsN.Rank$`Log2FC(SCLC-N-SCLC-A)_` * -log10(UP.in.AvsN.Rank$`wilcox(SCLC-N-SCLC-A)_`)
+UP.in.AvsN.Rank <- UP.in.AvsN.Rank[order(UP.in.AvsN.Rank$Rank),]
+UP.in.AvsN <- UP.in.AvsN.Rank[1:3,"Gene"]
+
+# UP in N vs A
+UP.in.NvsA.Rank <- George.Zscore.sPLSDA.KW.sign[George.Zscore.sPLSDA.KW.sign$Direction=="UP in NvsA",]
+UP.in.NvsA.Rank$Rank <- UP.in.NvsA.Rank$`Log2FC(SCLC-N-SCLC-A)_` * -log10(UP.in.NvsA.Rank$`wilcox(SCLC-N-SCLC-A)_`)
+UP.in.NvsA.Rank <- UP.in.NvsA.Rank[order(UP.in.NvsA.Rank$Rank, decreasing = T),]
+UP.in.NvsA <- UP.in.NvsA.Rank[1:3,"Gene"]
+
+
+# UP in P
+UP.in.P.Rank <- George.Zscore.sPLSDA.KW.sign[George.Zscore.sPLSDA.KW.sign$Direction=="UP in P" &
+                                               George.Zscore.sPLSDA.KW.sign$Gene!="POU2F3",]
+for (i in 1:nrow(UP.in.P.Rank)){
+  UP.in.P.Rank$MeanFC[i] <- mean(c(UP.in.P.Rank$`Log2FC(SCLC-P-SCLC-A)_`[i],
+                              UP.in.P.Rank$`Log2FC(SCLC-P-SCLC-N)_`[i],
+                              -UP.in.P.Rank$`Log2FC(SCLC-Y-SCLC-P)_`[i])) 
+  UP.in.P.Rank$Meanp[i] <- mean(c(UP.in.P.Rank$`wilcox(SCLC-P-SCLC-A)_`[i],
+                              UP.in.P.Rank$`wilcox(SCLC-P-SCLC-N)_`[i],
+                              UP.in.P.Rank$`wilcox(SCLC-Y-SCLC-P)_`[i])) 
+}
+UP.in.P.Rank$Rank <- UP.in.P.Rank$MeanFC * -log10(UP.in.P.Rank$Meanp)
+UP.in.P.Rank <- UP.in.P.Rank[order(UP.in.P.Rank$Rank, decreasing = T),]
+UP.in.P <- UP.in.P.Rank[1:3,"Gene"]
+
+
+# UP in Y
+UP.in.Y.Rank <- George.Zscore.sPLSDA.KW.sign[George.Zscore.sPLSDA.KW.sign$Direction=="UP in Y" ,]
+for (i in 1:nrow(UP.in.Y.Rank)){
+  UP.in.Y.Rank$MeanFC[i] <- mean(c(UP.in.Y.Rank$`Log2FC(SCLC-Y-SCLC-A)_`[i],
+                              UP.in.Y.Rank$`Log2FC(SCLC-Y-SCLC-N)_`[i],
+                              UP.in.Y.Rank$`Log2FC(SCLC-Y-SCLC-P)_`[i])) 
+  UP.in.Y.Rank$Meanp[i] <- mean(c(UP.in.Y.Rank$`wilcox(SCLC-Y-SCLC-A)_`[i],
+                              UP.in.Y.Rank$`wilcox(SCLC-Y-SCLC-N)_`[i],
+                              UP.in.Y.Rank$`wilcox(SCLC-Y-SCLC-P)_`[i])) 
+}
+UP.in.Y.Rank$Rank <- UP.in.Y.Rank$MeanFC * -log10(UP.in.Y.Rank$Meanp)
+UP.in.Y.Rank <- UP.in.Y.Rank[order(UP.in.Y.Rank$Rank, decreasing = T),]
+UP.in.Y <- UP.in.Y.Rank[1:3,"Gene"]
+
+
+# DN in Y
+DN.in.Y.Rank <- George.Zscore.sPLSDA.KW.sign[George.Zscore.sPLSDA.KW.sign$Direction=="DN in Y" ,]
+for (i in 1:nrow(DN.in.Y.Rank)){
+  DN.in.Y.Rank$MeanFC[i] <- mean(c(DN.in.Y.Rank$`Log2FC(SCLC-Y-SCLC-A)_`[i],
+                              DN.in.Y.Rank$`Log2FC(SCLC-Y-SCLC-N)_`[i],
+                              DN.in.Y.Rank$`Log2FC(SCLC-Y-SCLC-P)_`[i])) 
+  DN.in.Y.Rank$Meanp[i] <- mean(c(DN.in.Y.Rank$`wilcox(SCLC-Y-SCLC-A)_`[i],
+                              DN.in.Y.Rank$`wilcox(SCLC-Y-SCLC-N)_`[i],
+                              DN.in.Y.Rank$`wilcox(SCLC-Y-SCLC-P)_`[i])) 
+}
+
+
+DN.in.Y.Rank$Rank <- DN.in.Y.Rank$MeanFC * -log10(DN.in.Y.Rank$Meanp)
+DN.in.Y.Rank <- DN.in.Y.Rank[order(DN.in.Y.Rank$Rank),]
+DN.in.Y <- DN.in.Y.Rank[1:3,"Gene"]
+
+```
+
+
+Visualize best matching transcripts:
+
+```{r , fig.width=15, fig.height=10}
+g <- ggplot(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% c(UP.in.AvsN, UP.in.NvsA, UP.in.P, UP.in.Y, DN.in.Y),], 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_beeswarm()+
+  #geom_violin(alpha=0.5) + 
+  geom_boxplot(alpha=0.2)+
+  ylab("Z-score")+xlab("")+
+  #ggtitle(paste0(selected.markers.CCLE.significant[i], " - ",Selected.Marker.Expr.ext.sub[1,"Pattern"]))+
+  stat_compare_means(size = 2.5)+ #label.y = labelpos, 
+  #stat_compare_means(comparisons = my_comparisons,label = "p.signif", method = "t.test")+
+  theme(legend.position="none")
+g+ facet_wrap(Label ~ ., ncol=6, scales="free")
+
+
+
+```
+
+Check their protein annotations:
+
+```{r }
+View(Protein.Annot[Protein.Annot$Gene %in% c(UP.in.AvsN, UP.in.NvsA, UP.in.P, UP.in.Y, DN.in.Y),])
+```
+
+## Heatmap where only the best matching proteins are shown
+
+
+```{r , fig.width=10, fig.height=15}
+
+CP.gene.mark <- row.names(CP.expr.imp.sPLSDA[row.names(CP.expr.imp.sPLSDA) %in% c(UP.in.AvsN, UP.in.NvsA, UP.in.P, UP.in.Y, DN.in.Y),])
+CP.gene.pos <- sapply(CP.gene.mark, function(x){grep(x, row.names(CP.expr.imp.sPLSDA))})
+
+ha.CP <- rowAnnotation(foo = anno_mark(at = CP.gene.pos, 
+                                       labels = CP.gene.mark))
+
+
+CM.gene.mark <- row.names(CM.expr.imp.sPLSDA[row.names(CM.expr.imp.sPLSDA) %in% c(UP.in.AvsN, UP.in.NvsA, UP.in.P, UP.in.Y, DN.in.Y),])
+CM.gene.pos <- sapply(CM.gene.mark, function(x){grep(x, row.names(CM.expr.imp.sPLSDA))})
+
+ha.CM <- rowAnnotation(foo = anno_mark(at = CM.gene.pos, 
+                                       labels = CM.gene.mark))
+
+set.seed(12345)
+ht.CP <- Heatmap(CP.expr.imp.sPLSDA,
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+                     cluster_rows = T, 
+             column_split = Annot$Subtype,  
+             cluster_column_slices = FALSE,
+             cluster_columns = T,
+             clustering_method_columns = "complete",
+             clustering_method_rows = "complete",
+             right_annotation = ha.CP,
+             show_row_dend = F,
+             show_row_names = F,
+             column_gap = unit(0.1, "cm"),
+             column_names_gp = gpar(fontsize = 12),
+             gap = unit(0.1, "cm"),
+             border =T,
+             show_heatmap_legend = T,
+             show_column_names = T,
+             row_names_gp = gpar(fontsize = 10),
+             height = unit(nrow(CP.expr.imp.sPLSDA)*0.3, "cm"),
+             width = unit(ncol(CP.expr.imp.sPLSDA)*0.4, "cm"))
+#ht.CP
+
+ht.CM <- Heatmap(CM.expr.imp.sPLSDA,
+                     name="Z-score",
+             col=colorRamp2(c(-2, 0,2), c("blue","white","red")),
+                     cluster_rows = T, 
+             column_split = Annot$Subtype,  
+             cluster_column_slices = FALSE,
+             cluster_columns = T,
+             clustering_method_columns = "complete",
+             clustering_method_rows = "complete",
+             show_row_dend = F,
+             right_annotation = ha.CM,
+             show_row_names = F,
+             column_gap = unit(0.1, "cm"),
+             column_names_gp = gpar(fontsize = 12),
+             row_names_gp = gpar(fontsize = 10),
+             gap = unit(0.1, "cm"),
+             border =T,
+             show_heatmap_legend = T,
+             show_column_names = T,
+             height = unit(nrow(CM.expr.imp.sPLSDA)*0.3, "cm"),
+             width = unit(ncol(CM.expr.imp.sPLSDA)*0.4, "cm"))
+
+ht <- ht.CP %v% ht.CM
+draw(ht, annotation_legend_side="left",
+             heatmap_legend_side="left",
+     gap = unit(5, "mm"))
+```
+
+
+```{r ,eval=FALSE}
+pdf(file="Figures/sPLSDA_selected.pdf",width = 10, height = 15)
+draw(ht, annotation_legend_side="left",
+             heatmap_legend_side="left",
+     gap = unit(5, "mm"))
+dev.off()
+
+```
+
+
+## Boxplots of best matching transcripts
+
+
+```{r , fig.width=8, fig.height=15}
+glist.AvsN <- list()
+comps <- list(c("A","N"),c("A","P"),c("A","Y"))
+for (i in 1:length(UP.in.AvsN)){
+  
+  g <- ggplot(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% UP.in.AvsN[i],], 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+ 
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_quasirandom()+
+  geom_boxplot(alpha=0.9)+
+  ylab("Z-score")+xlab("")+
+  ggtitle(UP.in.AvsN[i])+
+  #stat_compare_means(size = 5)+ #label.y = labelpos, 
+  stat_compare_means(comparisons = comps, label="p.signif", size=4)+
+  theme(legend.position="none",strip.text = element_text(size=15), axis.text=element_text(size=15))
+  glist.AvsN[[i]] <- g
+}
+
+
+glist.NvsA <- list()
+comps <- list(c("N","A"),c("N","P"),c("N","Y"))
+for (i in 1:length(UP.in.NvsA)){
+  
+  g <- ggplot(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% UP.in.NvsA[i],], 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+ 
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_quasirandom()+
+  geom_boxplot(alpha=0.9)+
+  ylab("Z-score")+xlab("")+
+  ggtitle(UP.in.NvsA[i])+
+  #stat_compare_means(size = 5)+ #label.y = labelpos, 
+  stat_compare_means(comparisons = comps, label="p.signif", size=4)+
+  theme(legend.position="none",strip.text = element_text(size=15), axis.text=element_text(size=15))
+  glist.NvsA[[i]] <- g
+}
+
+
+glist.P <- list()
+comps <- list(c("P","A"),c("P","N"),c("P","Y"))
+for (i in 1:length(UP.in.P)){
+  
+  g <- ggplot(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% UP.in.P[i],], 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+ 
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_quasirandom()+
+  geom_boxplot(alpha=0.9)+
+  ylab("Z-score")+xlab("")+
+  ggtitle(UP.in.P[i])+
+  #stat_compare_means(size = 5)+ #label.y = labelpos, 
+  stat_compare_means(comparisons = comps, label="p.signif", size=4)+
+  theme(legend.position="none",strip.text = element_text(size=15), axis.text=element_text(size=15))
+  glist.P[[i]] <- g
+}
+
+glist.UP.Y <- list()
+comps <- list(c("Y","A"),c("Y","N"),c("Y","P"))
+for (i in 1:length(UP.in.Y)){
+  
+  g <- ggplot(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% UP.in.Y[i],], 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+ 
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_quasirandom()+
+  geom_boxplot(alpha=0.9)+
+  ylab("Z-score")+xlab("")+
+  ggtitle(UP.in.Y[i])+
+  #stat_compare_means(size = 5)+ #label.y = labelpos, 
+  stat_compare_means(comparisons = comps, label="p.signif", size=4)+
+  theme(legend.position="none",strip.text = element_text(size=15), axis.text=element_text(size=15))
+  glist.UP.Y[[i]] <- g
+}
+
+
+glist.DN.Y <- list()
+comps <- list(c("Y","A"),c("Y","N"),c("Y","P"))
+for (i in 1:length(DN.in.Y)){
+  
+  g <- ggplot(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% DN.in.Y[i],], 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+ 
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_quasirandom()+
+  geom_boxplot(alpha=0.9)+
+  ylab("Z-score")+xlab("")+
+  ggtitle(DN.in.Y[i])+
+  #stat_compare_means(size = 5)+ #label.y = labelpos, 
+  stat_compare_means(comparisons = comps, label="p.signif", size=4)+
+  theme(legend.position="none",strip.text = element_text(size=15), axis.text=element_text(size=15))
+  glist.DN.Y[[i]] <- g
+}
+
+
+ggarrange(plotlist = c(glist.AvsN, glist.NvsA, glist.P, glist.UP.Y, glist.DN.Y), ncol=3, nrow=5)
+
+#ggsave("Figures/sPLSDA_George_top.pdf",
+#       ggarrange(plotlist = c(glist.AvsN, glist.NvsA, glist.P, glist.UP.Y, glist.DN.Y), ncol=3, nrow=5))
+
+```
+
+
+## Boxplots of confirmed transcripts (= borderline significant too)
+
+```{r , fig.width=15, fig.height=10}
+g <- ggplot(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% confirmed,], 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_beeswarm()+
+  geom_violin(alpha=0.5) + 
+  geom_boxplot(alpha=0.2)+
+  ylab("Z-score")+xlab("")+
+  #ggtitle(paste0(selected.markers.CCLE.significant[i], " - ",Selected.Marker.Expr.ext.sub[1,"Pattern"]))+
+  stat_compare_means(size = 2.5)+ #label.y = labelpos, 
+  #stat_compare_means(comparisons = my_comparisons,label = "p.signif", method = "t.test")+
+  theme(legend.position="none")
+g+ facet_wrap(Label ~ ., ncol=6, scales="free")
+
+```
+## Boxplots showing proteomics and transcriptomics side-by-side for confirmed transcripts
+
+```{r , fig.width=12, fig.height=15}
+
+confirmed[confirmed %in% sPLS.DA.CP$Gene]
+confirmed[confirmed %in% sPLS.DA.CM$Gene]
+
+Proteomics.melt <- melt(as.matrix(rbind(t(scale(t(CP.expr.imp.sPLSDA[confirmed[confirmed %in% sPLS.DA.CP$Gene],]))),
+                         t(scale(t(CM.expr.imp.sPLSDA[confirmed[confirmed %in% sPLS.DA.CM$Gene],]))))))
+colnames(Proteomics.melt) <- c("Gene", "Sample", "Z.score")
+sapply(Proteomics.melt, class)
+Proteomics.melt$Gene <- unfactor(Proteomics.melt$Gene)
+Proteomics.melt$Sample <- unfactor(Proteomics.melt$Sample)
+Proteomics.melt$Label <- paste(Proteomics.melt$Gene,"Proteomics",sep="\n")
+for (i in 1:nrow(Proteomics.melt)){
+  Proteomics.melt$Label[i] <- paste0(Proteomics.melt$Label[i], "\n",
+                                    unique(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene == Proteomics.melt$Gene[i],"Direction"]))
+}
+
+Proteomics.melt <- merge(Proteomics.melt, Annot[,c("Sample", "Subtype")], by="Sample")
+Proteomics.melt$Data <- "Cell line\nproteomics"
+Proteomics.melt$Subtype <- gsub("SCLC-","",Proteomics.melt$Subtype)
+
+George.melt <- George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% confirmed,c("Label", "Gene", "Sample", "Z.score", "Subtype")]
+George.melt$Label <- sapply(strsplit(George.melt$Label, split="\nTrend", fixed = T),"[[",1)
+George.melt$Label <- paste(George.melt$Label,"Transcriptomics",sep="\n")
+George.melt$Data <- "Tissue\ntranscriptomics"
+
+
+Both.melt <- rbind(Proteomics.melt, George.melt)
+
+confirmed.transcripts <- unique(Both.melt[Both.melt$Data=="Tissue\ntranscriptomics","Label"])
+
+plotlist <- list()
+
+i=1
+for (i in 1:length(confirmed.transcripts)){
+  confirmed.transcripts.sub <- unique(Both.melt[Both.melt$Label==confirmed.transcripts[i],"Gene"])
+  
+  Both.melt.sub <- Both.melt[Both.melt$Label == confirmed.transcripts[i] |
+                               (Both.melt$Data=="Cell line\nproteomics" & Both.melt$Gene==confirmed.transcripts.sub),]
+  
+  g <- ggplot(Both.melt.sub, 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_classic()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_beeswarm()+
+  geom_violin(alpha=0.5) + 
+  geom_boxplot(alpha=0.2)+
+  ylab("Z-score")+xlab("")+
+  #ggtitle(paste0(selected.markers.CCLE.significant[i], " - ",Selected.Marker.Expr.ext.sub[1,"Pattern"]))+
+  #stat_compare_means(size = 2.5)+ #label.y = labelpos, 
+  #stat_compare_means(comparisons = my_comparisons,label = "p.signif", method = "t.test")+
+  theme(legend.position="none")
+  #g+ facet_wrap(Label ~ ., ncol=6, scales="free")
+  plotlist[[i]] <- g+ facet_wrap(Label ~ ., ncol=2, scales="free")
+}
+
+grid.arrange(grobs=plotlist, ncol=3)
+```
+
+
+
+## Boxplots showing proteomics and transcriptomics side-by-side for matching transcripts
+
+
+```{r }
+selected.markers <- c("ACTL6A", "ANXA4","ARL1","AVIL","AXL","BCAM",
+                      "CALU","CAMKV","CENPV","CNN2","CYB5R1",
+                      "EIF2B4","EPHA2","GPX8","GTPBP1","HMGB3","KRT18","KRT8","LRMP",
+                      "MYADM","NCAM1","OLFM1","PKD2","PLCG2","RAB39B","RAB3A","RCOR2","RSU1",
+                      "SLC27A2","SLC35B1","SPINT1","SYNGR1","THOC6","TIPIN","TMEM189","TPM2")
+
+George.Zscore.melt.sPLSDA.selected <- George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% selected.markers &
+                                                                  George.Zscore.melt.sPLSDA$Mean.FPKM > 1,]
+
+
+```
+
+
+
+```{r , fig.width=10, fig.height=12}
+Proteomics.melt <- melt(as.matrix(rbind(t(scale(t(CP.expr.imp.sPLSDA[selected.markers[selected.markers %in% sPLS.DA.CP$Gene],]))),
+                         t(scale(t(CM.expr.imp.sPLSDA[selected.markers[selected.markers %in% sPLS.DA.CM$Gene],]))))))
+colnames(Proteomics.melt) <- c("Gene", "Sample", "Z.score")
+sapply(Proteomics.melt, class)
+Proteomics.melt$Gene <- unfactor(Proteomics.melt$Gene)
+Proteomics.melt$Sample <- unfactor(Proteomics.melt$Sample)
+Proteomics.melt$Label <- paste(Proteomics.melt$Gene,"Proteomics",sep="\n")
+for (i in 1:nrow(Proteomics.melt)){
+  Proteomics.melt$Label[i] <- paste0(Proteomics.melt$Label[i], "\n",
+                                    unique(George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene == Proteomics.melt$Gene[i],"Direction"]))
+}
+
+Proteomics.melt <- merge(Proteomics.melt, Annot[,c("Sample", "Subtype")], by="Sample")
+Proteomics.melt$Data <- "Cell line\nproteomics"
+Proteomics.melt$Subtype <- gsub("SCLC-","",Proteomics.melt$Subtype)
+
+George.melt <- George.Zscore.melt.sPLSDA[George.Zscore.melt.sPLSDA$Gene %in% selected.markers,c("Label", "Gene", "Sample", "Z.score", "Subtype")]
+George.melt$Label <- sapply(strsplit(George.melt$Label, split="\nTrend", fixed = T),"[[",1)
+George.melt$Label <- paste(George.melt$Label,"Transcriptomics",sep="\n")
+George.melt$Data <- "Tissue\ntranscriptomics"
+
+
+Both.melt <- rbind(Proteomics.melt, George.melt)
+
+Both.melt <- Both.melt[Both.melt$Gene %in% unique(Both.melt[grep("UP in Y",Both.melt$Label),"Gene"]),]
+Both.melt$Label2 <- paste(Both.melt$Gene,Both.melt$Data, sep="\n")
+
+confirmed.transcripts <- unique(Both.melt[Both.melt$Data=="Tissue\ntranscriptomics","Label"])
+
+plotlist <- list()
+
+i=1
+for (i in 1:length(confirmed.transcripts)){
+  confirmed.transcripts.sub <- unique(Both.melt[Both.melt$Label==confirmed.transcripts[i],"Gene"])
+  
+  Both.melt.sub <- Both.melt[Both.melt$Label == confirmed.transcripts[i] |
+                               (Both.melt$Data=="Cell line\nproteomics" & Both.melt$Gene==confirmed.transcripts.sub),]
+  
+  g <- ggplot(Both.melt.sub, 
+            aes(x=Subtype, y=Z.score, fill=Subtype))+ theme_bw()+# +geom_violin()  
+  scale_color_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ 
+  scale_fill_manual(values=c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE"))+ geom_beeswarm()+
+  #geom_violin(alpha=0.5) + 
+  geom_boxplot()+
+  ylab("Z-score")+xlab("")+
+  #ggtitle(paste0(selected.markers.CCLE.significant[i], " - ",Selected.Marker.Expr.ext.sub[1,"Pattern"]))+
+  #stat_compare_means(size = 2.5)+ #label.y = labelpos, 
+  #stat_compare_means(comparisons = my_comparisons,label = "p.signif", method = "t.test")+
+  theme(legend.position="none")
+  #g+ facet_wrap(Label ~ ., ncol=6, scales="free")
+  plotlist[[i]] <- g+ facet_wrap(Label2 ~ ., ncol=2, scales="free")
+}
+
+grid.arrange(grobs=plotlist, ncol=2)
+
+#ggsave(file="Figures/sPLSDA_Y_George_confirmed.pdf", grid.arrange(grobs=plotlist, ncol=2))
+
+
+```
+
+
+

@@ -1,0 +1,161 @@
+---
+title: "Figure 4ace and 5a"
+author: Beata Szeitz
+output:
+  html_notebook:
+    toc: yes
+---
+
+```{r Load packages}
+# R vs.4.2.0
+source("Load_packages.R")
+source("Utility_functions.R")
+source("Color_list.R")
+```
+ 
+
+```{r}
+loaded <- load("RData/Fig_CNET_SubtypeSpecific_noSPfilter.RData")
+loaded
+
+Subtype.specific[[1]]$Direction <- ifelse(Subtype.specific[[1]]$`Log2FC(SCLC-N-SCLC-A)` > 0, "DN", "UP") # A
+Subtype.specific[[1]]$Direction <- ifelse(Subtype.specific[[1]]$Accession =="P50553", "UP", Subtype.specific[[1]]$Direction) # A
+
+Subtype.specific[[2]]$Direction <- ifelse(Subtype.specific[[2]]$`Log2FC(SCLC-N-SCLC-A)` > 0, "UP", "DN") # N
+
+Subtype.specific[[3]]$Direction <- ifelse(Subtype.specific[[3]]$`Log2FC(SCLC-P-SCLC-A)` > 0, "UP", "DN") # P
+Subtype.specific[[3]]$Direction <- ifelse(Subtype.specific[[3]]$Accession =="Q8NE09", "UP", Subtype.specific[[3]]$Direction) # A
+
+Subtype.specific[[4]]$Direction <- ifelse(Subtype.specific[[4]]$`Log2FC(SCLC-Y-SCLC-A)` > 0, "UP", "DN") # Y
+Subtype.specific[[4]]$Direction <- ifelse(Subtype.specific[[4]]$Accession =="O95158", "DN", Subtype.specific[[4]]$Direction) # A
+Subtype.specific[[4]]$Direction <- ifelse(Subtype.specific[[4]]$Accession =="Q58EX7", "DN", Subtype.specific[[4]]$Direction) # A
+
+```
+
+```{r fig.width=15, fig.height=15}
+
+
+subtype.colors <- c("#0000FE", "#21FE06","#FEFE0A", "#FB02FE")
+
+cnetplots <- list()
+
+i=1
+for (i in 1:length(ORA.SubtypeSpecific)){
+  
+  CP.CM.intersect <- Subtype.specific[[i]][duplicated(Subtype.specific[[i]]$Accession),"Accession"]
+  only.CP <- Subtype.specific[[i]][!Subtype.specific[[i]]$Accession %in% CP.CM.intersect &
+                                     Subtype.specific[[i]]$Data =="CP","Accession"]
+  only.CM <- Subtype.specific[[i]][!Subtype.specific[[i]]$Accession %in% CP.CM.intersect &
+                                     Subtype.specific[[i]]$Data =="CM","Accession"]
+  CP.CM.intersect.g <- Protein.to.gene[Protein.to.gene$Protein %in% CP.CM.intersect,"Gene"]
+  only.CP.g <- Protein.to.gene[Protein.to.gene$Protein %in% only.CP,"Gene"]
+  only.CM.g <- Protein.to.gene[Protein.to.gene$Protein %in% only.CM,"Gene"]
+  
+  
+  other.dir <- c(only.CP, only.CM)
+  names(other.dir) <- c(only.CP, only.CM)
+  k=1
+  for (k in 1:length(other.dir)){
+    other.dir[k] <- Subtype.specific[[i]][Subtype.specific[[i]]$Accession == other.dir[k],"Direction"]
+  }
+  
+  if (isEmpty(CP.CM.intersect.g)){
+    CP.CM.intersect <- "NA"
+    CP.CM.intersect.g <- "NA"
+    
+    all.dir <- c(other.dir)
+    names(all.dir) <- sapply(names(all.dir), function(x){
+      Protein.to.gene[Protein.to.gene$Protein ==x,"Gene"]
+    })
+    
+  } else {
+    CP.CM.intersect.dir <- CP.CM.intersect
+    names(CP.CM.intersect.dir) <- CP.CM.intersect
+    
+    k=1
+    for (k in 1:length(CP.CM.intersect.dir)){
+      direct.CP <- Subtype.specific[[i]][Subtype.specific[[i]]$Accession == CP.CM.intersect.dir[k] &
+                                           Subtype.specific[[i]]$Data=="CP","Direction"]
+      direct.CM <- Subtype.specific[[i]][Subtype.specific[[i]]$Accession == CP.CM.intersect.dir[k] &
+                                           Subtype.specific[[i]]$Data=="CM","Direction"]
+      if (direct.CP == direct.CM){
+        CP.CM.intersect.dir[k] <- direct.CP
+      } else {
+        CP.CM.intersect.dir[k] <- paste(direct.CP, direct.CM, collapse = "/")
+      }
+    }
+    
+    all.dir <- c(CP.CM.intersect.dir, other.dir)
+    names(all.dir) <- sapply(names(all.dir), function(x){
+      Protein.to.gene[Protein.to.gene$Protein ==x,"Gene"]
+    })
+  }
+  
+  
+  ORA.sum <- ORA.SubtypeSpecific[[i]]$KEGG
+  ORA.sum@result <- ORA.sum@result[ORA.sum@result$pvalue < 0.05,]
+  for (j in 1:nrow(ORA.sum@result)){
+    proteins <- strsplit(ORA.sum@result$geneID[j], split="/", fixed=T)[[1]]
+    genes <- Protein.to.gene[proteins,2]
+    ORA.sum@result$geneID[j] <- paste(genes, collapse="/")
+  }
+  cnetplots[[i]] <- cnetplot(ORA.sum, showCategory = 15, circular=F, layout = "kk",
+                             cex_label_category = 1, cex_label_gene = 0.9, shadowtext = "category")
+  #cnetplots[[i]]
+  cnetplots[[i]]$data$size <- 3
+  cnetplots[[i]]$data$color <- subtype.colors[i]
+  
+  for (k in 1:nrow(cnetplots[[i]]$data)){
+    if (cnetplots[[i]]$data$name[k] %in% names(all.dir)){
+      if (all.dir[cnetplots[[i]]$data$name[k]] =="UP"){
+        cnetplots[[i]]$data$color[k] <- "#f4766d"
+        cnetplots[[i]]$data$size[k] <- 4
+      } else if (all.dir[cnetplots[[i]]$data$name[k]] =="DN"){
+        cnetplots[[i]]$data$color[k] <- "#03adc6"
+        cnetplots[[i]]$data$size[k] <- 4
+      } else {
+        cnetplots[[i]]$data$color[k] <- "black"
+        cnetplots[[i]]$data$size[k] <- 4
+      }
+    }
+    
+    
+  }
+}
+
+
+```
+
+
+
+
+```{r , fig.width=12, fig.height=15}
+
+top_row <- plot_grid(cnetplots[[1]], cnetplots[[2]], cnetplots[[3]],
+                     ncol = 3,
+                     labels = c('SCLC-A','SCLC-N',"SCLC-P"),
+                     label_fontfamily = '',
+                     label_fontface = 'bold',
+                     label_size = 16,
+                     align = 'h',
+                     rel_widths = c(1,1,1))
+
+bottom_row <- plot_grid(cnetplots[[4]],
+                        ncol = 1,
+                        labels = c('SCLC-Y'),
+                        label_fontfamily = '',
+                        label_fontface = 'bold',
+                        label_size = 16,
+                        align = 'h',
+                        rel_widths = c(1))
+
+plot_grid(top_row, bottom_row, ncol = 1,
+          rel_heights = c(0.75,1))
+
+
+ggsave("Figures/SubtypeSpecific_cnetplot_noSPfilter.pdf", width = 12, height=15)
+```
+
+
+
+

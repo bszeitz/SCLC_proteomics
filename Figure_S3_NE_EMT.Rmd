@@ -7,7 +7,8 @@ output:
 ---
 
 ```{r }
-source("Install_load_packages.R")
+# R vs.4.2.0
+source("Load_packages.R")
 source("Utility_functions.R")
 source("Color_list.R")
 ```
@@ -28,6 +29,9 @@ source("Color_list.R")
 
 
 ```
+
+
+# NE markers heatmap
 
 ```{r }
 loaded <- load("RData/NE_markers_heatmap.RData")
@@ -79,6 +83,8 @@ dev.off()
 
 ```
 
+# EMT markers heatmap
+
 
 ```{r }
 loaded <- load("RData/EMT_markers_heatmap.RData")
@@ -128,6 +134,7 @@ dev.off()
 ```
 
 
+# NE-EMT correlations
 
 
 ```{r }

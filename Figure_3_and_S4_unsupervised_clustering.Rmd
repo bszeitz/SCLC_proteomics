@@ -1,5 +1,5 @@
 ---
-title: "Figure 2 and S4"
+title: "Figure 3 and S4"
 author: Beata Szeitz
 output:
   html_notebook:
@@ -7,7 +7,8 @@ output:
 ---
 
 ```{r }
-source("Install_load_packages.R")
+# R vs.4.2.0
+source("Load_packages.R")
 source("Utility_functions.R")
 source("Color_list.R")
 ```
@@ -20,10 +21,11 @@ loaded
 
 ```{r }
 CP.expr.imp.sd.scaled <- t(scale(t(CP.expr.imp.sd)))
-CM.expr.imp.secr.sd.scaled <- t(scale(t(CM.expr.imp.secr.sd)))
+CM.expr.imp.sd.scaled <- t(scale(t(CM.expr.imp.sd)))
 
 ```
 
+# PVCA
 
 ```{r PVCAs, fig.width = 8, fig.height = 4}
 annot.columns <- c("Subtype", 
@@ -35,7 +37,7 @@ PVCA.CP <- plot_PVCA(as.data.frame(CP.expr.imp.sd), Annot, "Sample",
           annot.columns, pct.threshold = 0.6, color="blue", 
           "", F)
 PVCA.CP$Data <- "CP"
-PVCA.CM <- plot_PVCA(as.data.frame(CM.expr.imp.secr.sd), Annot, "Sample", 
+PVCA.CM <- plot_PVCA(as.data.frame(CM.expr.imp.sd), Annot, "Sample", 
           annot.columns, pct.threshold = 0.6, color="blue", 
           "", F)
 PVCA.CM$Data <- "CM"
@@ -45,16 +47,19 @@ PVCA.CP.CM$Data <- factor(PVCA.CP.CM$Data, levels = c("CP","CM"))
 
 ```
 
-```{r , fig.width = 6, fig.height = 4}
-ggplot(PVCA.CP.CM, aes(x=label, y=dat,fill=Data)) + ggtitle("SD > 1.25") + geom_bar(stat="identity", position=position_dodge())+
+```{r , fig.width = 4, fig.height = 4}
+ggplot(PVCA.CP.CM, aes(x=label, y=dat,fill=Data)) + ggtitle("SD > 1.25") + 
+  geom_bar(stat="identity", position=position_dodge(), color="black")+
   #geom_text(aes(label=round(prop,3), y=prop+0.04), size=4)+ 
-  scale_x_discrete(limits=PVCA.CP$label)+ scale_fill_manual(values=c("darkgrey","lightblue"))+
+  scale_x_discrete(limits=PVCA.CP$label)+ scale_fill_manual(values=c("#eec892","lightblue"))+
   scale_y_continuous(limits = c(0,0.65))+labs(x= "Effects", y= "Weighted avr. proportion var.")+ 
-  theme_classic()+theme(legend.position="bottom")
+  theme_classic()+theme(legend.position="bottom")#+ theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5))
 
 ggsave(file="Figures/PVCA_CP_CM_SDfilt.pdf")
 
 ```
+
+# PCA
 
 
 ```{r }
@@ -71,7 +76,7 @@ CP.PCA <- ggbiplot(prcomp(t(na.omit(CP.expr.imp.sd.scaled))),
                    circle=F)  + theme_classic() + 
   geom_abline(intercept = 1.2, slope = -4, color="black", 
               linetype="dashed", size=1.5) +
-  annotate("text", x=0.8, y=2.1, label= "Susp/Semi-Adh",fontface =2, color="black")+
+  annotate("text", x=0.2, y=2.1, label= "Susp",fontface =2, color="black")+
   annotate("text", x=-0.8, y=2.1, label= "Adh",fontface =2, color="black")+ggtitle("CP (SD > 1.25)")+ 
   #annotate("text", x=-0.45, y=-0.55, label= "H1048",fontface =2, color="red")+
   annotate("text", x=-0.85, y=-1.0, label= "H1882",fontface =2, color="red")+
@@ -82,7 +87,7 @@ CP.PCA <- ggbiplot(prcomp(t(na.omit(CP.expr.imp.sd.scaled))),
   ylab("PC2 (9.7% explained var.)")
 
 CP.PCA
-CM.secr.PCA <- ggbiplot(prcomp(t(na.omit(CM.expr.imp.secr.sd.scaled))), 
+CM.PCA <- ggbiplot(prcomp(t(na.omit(CM.expr.imp.sd.scaled))), 
                         choices= c(1,2),
                         var.axes=FALSE, 
                         #labels=Annot$Name,
@@ -93,17 +98,17 @@ CM.secr.PCA <- ggbiplot(prcomp(t(na.omit(CM.expr.imp.secr.sd.scaled))),
                         circle=F)  + theme_classic() + 
   geom_abline(intercept = -0.5, slope = 2.5, color="black", 
               linetype="dashed", size=1.5) +
-  annotate("text",  x=-1.4, y=-2, label= "Susp/Semi-Adh",fontface =2, color="black")+
-  annotate("text", x=-0.3, y=-2, label= "Adh",fontface =2,  color="black")+ggtitle("CM secreted proteins (SD > 1.25)")+ 
+  annotate("text",  x=-1, y=-2, label= "Susp",fontface =2, color="black")+
+  annotate("text", x=-0.3, y=-2, label= "Adh",fontface =2,  color="black")+ggtitle("CM (SD > 1.25)")+ 
   geom_point(aes(shape=culture.type, color=Annot$Subtype), size=3)+scale_shape_manual(values=c(16, 8, 15))+
-  scale_color_manual(values=c("#0000FE","#21FE06","gold","#FB02FE"))+ xlab("PC1 (20.1% explained var.)")+
-  ylab("PC2 (12.0% explained var.)")
+  scale_color_manual(values=c("#0000FE","#21FE06","gold","#FB02FE"))+ xlab("PC1 (18.5% explained var.)")+
+  ylab("PC2 (13.9% explained var.)")
 
-CM.secr.PCA
+CM.PCA
 ```
 
 ```{r , fig.width=12, fig.height=5}
-ggarrange(CP.PCA, CM.secr.PCA, 
+ggarrange(CP.PCA, CM.PCA, 
           ncol=2, nrow=1)
 
 ggsave(file="Figures/PCA_CP_CM_SDfilt.pdf")
@@ -111,6 +116,7 @@ ggsave(file="Figures/PCA_CP_CM_SDfilt.pdf")
 
 ```
 
+# Consensus clustering
 
 
 ```{r }
@@ -200,8 +206,8 @@ ht = draw(ht, annotation_legend_side="bottom",
 ```
 
 
-```{r }
-pdf(file="Figures/Consclust_heatmap.pdf",width = 12, height = 12)
+```{r ,eval=F}
+pdf(file="Figures/Consclust_heatmap_420.pdf",width = 12, height = 12)
 ht = draw(ht, annotation_legend_side="bottom",
              heatmap_legend_side="left")
 dev.off()

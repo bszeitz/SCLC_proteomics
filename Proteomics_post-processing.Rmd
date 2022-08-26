@@ -7,12 +7,12 @@ output:
 ---
 
 
-
 # Load packages, functions and files
 
 
 ```{r Load R files}
-source("Install_load_packages.R")
+# R vs.4.2.0
+source("Load_packages.R")
 source("Utility_functions.R")
 source("Color_list.R")
 ```
@@ -132,6 +132,117 @@ for (i in 1:2){
 }
 
 heatmaps[[1]] / heatmaps[[2]]
+
+```
+
+
+```{r , fig.width=5, fig.height=3}
+Tables$CP$Annot$Nr.proteins.identified <- apply(Tables$CP$Expr.raw, 2, function(x){
+  sum(!is.na(x))
+})
+Tables$CP$Annot$Data <- "CP"
+Tables$CM$Annot$Nr.proteins.identified <- apply(Tables$CM$Expr.raw, 2, function(x){
+  sum(!is.na(x))
+})
+Tables$CM$Annot$Data <- "CM"
+
+All.Annot <- rbind(Tables$CP$Annot,
+                        Tables$CM$Annot)
+All.Annot$MSbatch <- paste("B",All.Annot$MSbatch,sep="")
+
+Nr.of.proteins.summary <- data.frame(Data.Acquisiton = c("DDA","DIA","DDA","DIA","DDA","DIA","DDA","DIA"),
+                                     Data = c("CP","CP","CP","CP","CM","CM","CM","CM"),
+                                     Batch = c("B1","B1","B2","B2","B1","B1","B2","B2"),
+                                     Mean.ident.proteins = NA,
+                                     SD.ident.proteins = NA)
+
+i=1
+for (i in 1:nrow(Nr.of.proteins.summary)){
+  
+  relevant.numbers <- All.Annot[All.Annot$Data.Acquisiton == Nr.of.proteins.summary$Data.Acquisiton[i] &
+                                  All.Annot$Data == Nr.of.proteins.summary$Data[i] &
+                                  All.Annot$MSbatch == Nr.of.proteins.summary$Batch[i],"Nr.proteins.identified"]
+  
+  Nr.of.proteins.summary$Mean.ident.proteins[i] <- mean(relevant.numbers)
+  Nr.of.proteins.summary$SD.ident.proteins[i] <- sd(relevant.numbers)
+  
+}
+
+Nr.of.proteins.summary$Data <- factor(Nr.of.proteins.summary$Data, levels = c("CP","CM"))
+
+
+g <- ggplot(Nr.of.proteins.summary, aes(x=Data.Acquisiton,y=Mean.ident.proteins, fill=Batch)) + 
+    geom_bar(position=position_dodge(), stat="identity") +
+    geom_errorbar(aes(ymin=Mean.ident.proteins-SD.ident.proteins, ymax=Mean.ident.proteins+SD.ident.proteins),
+                  width=.2,                    # Width of the error bars
+                  position=position_dodge(.9))+ylab("Average number of\nidentified proteins")+
+  xlab("Data acquisition method")+theme_bw()
+g + facet_grid(cols=vars(Data))
+
+
+```
+
+```{r , fig.width=7, fig.height=5}
+gglist <- list()
+sample.colors <- c("#A6CEE3","#1F78B4","#B2DF8A","#33A02C","#FB9A99","#E31A1C", #brewer.pal(12,"Paired")
+               "#FDBF6F","#FF7F00","#CAB2D6","#6A3D9A","gold","#B15928",
+               "black","darkgrey", "#00ff00", "#22bdef", "#b4009e", "#00ffbf", 
+               "#ff0096","#6700ff","#ffab00","#ead3b1","#89bef1","#ccff00","#2f7f6f","#b73c7e")
+names(sample.colors) <- Annot$Sample
+
+plot.titles <- list(c("Cell Pellet - Batch 1", "Culture Media - Batch 1"),
+                    c("Cell Pellet - Batch 2", "Culture Media - Batch 2"))
+                 
+
+i=1
+for (i in 1:2){
+  samples <- row.names(Tables[["CP"]][["Annot"]][Tables[["CP"]][["Annot"]]$MSbatch==i ,])
+  samples <- samples[!grepl("SCLC22_|SCLC25_|SCLC26_",samples)]
+  dat.acq <- Tables[["CP"]][["Annot"]][samples,"Data.Acquisiton"]
+  
+  
+  g1 <- ggbiplot(prcomp(scale(t(na.omit(Tables[["CP"]][["Expr"]][,samples])))), 
+                   choices= c(1,2),
+                   var.axes=FALSE, 
+                   groups=as.factor(Tables[["CP"]][["Annot"]][samples,"Sample"]),
+                   labels.size = 3,
+                   ellipse=F,
+                   ellipse.prob = 0.1,
+                   circle=F)+
+    geom_point(alpha = 0.5, aes(shape=dat.acq, color = Tables[["CP"]][["Annot"]][samples,"Sample"]), size=5)+
+    scale_shape_manual(values=c(16,17))+
+    scale_color_manual(values= sample.colors[Tables[["CP"]][["Annot"]][samples,"Sample"]]) +
+    theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
+    theme(legend.position="top")+ guides(fill=guide_legend(ncol=3, nrow=7, byrow=TRUE))+
+    labs(col="Cell\nline\nID", shape="Data\nAcquisition\nMethod")+ggtitle(plot.titles[[i]][1])
+  print(g1)
+  ggsave(file=paste0("Figures/PCA_CP_batch",i,".pdf"))
+  gglist[[length(gglist)+1]] <- g1
+  
+  
+  samples <- row.names(Tables[["CM"]][["Annot"]][Tables[["CM"]][["Annot"]]$MSbatch==i &
+                                                   Tables[["CM"]][["Annot"]]$MainID !="SCLC09_B2_DDA_R1",])
+  samples <- samples[!grepl("SCLC22_|SCLC25_|SCLC26_",samples)]
+  dat.acq <- Tables[["CM"]][["Annot"]][samples,"Data.Acquisiton"]
+  g2 <- ggbiplot(prcomp(scale(t(na.omit(Tables[["CM"]][["Expr"]][,samples])))), 
+                   choices= c(1,2),
+                   var.axes=FALSE, 
+                   groups=as.factor(Tables[["CM"]][["Annot"]][samples,"Sample"]),
+                   labels.size = 3,
+                   ellipse=F,
+                   ellipse.prob = 0.1,
+                   circle=F)+
+    geom_point(alpha = 0.5, aes(shape=dat.acq, color = Tables[["CM"]][["Annot"]][samples,"Sample"]), size=5)+
+    scale_shape_manual(values=c(16,17))+
+    scale_color_manual(values= sample.colors[Tables[["CM"]][["Annot"]][samples,"Sample"]]) +
+    theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
+    theme(legend.position="top")+ guides(fill=guide_legend(ncol=3, nrow=7, byrow=TRUE))+
+    labs(col="Cell\nline\nID", shape="Data\nAcquisition\nMethod")+ggtitle(plot.titles[[i]][2])
+  print(g2)
+  ggsave(file=paste0("Figures/PCA_CM_batch",i,".pdf"))
+  gglist[[length(gglist)+1]] <- g2
+}
+
 
 ```
 
