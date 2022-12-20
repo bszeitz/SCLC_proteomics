@@ -2,7 +2,7 @@
 
 **This repository contains the custom R code used for the analyses reported in:**
 
-Szeitz, B., Megyesfalvi, Z., Woldmar N., Valkó, Z., Schwendenwein, A., Bárány, N., Paku, S., László, V., Kiss, H., Bugyik, E., Lang, C., Szász, A.M., Pizzatti, L., Bogos, K., Hoda, M.A., Hoetzenecker, H., Marko-Varga, G., Horvatovich, P., Döme, B., Schelch, K., Rezeli, M. (2022). **In-depth proteomic analysis reveals unique subtype-specific signatures in human small cell lung cancer.** Manuscript submitted for publication. 
+**Szeitz B, Megyesfalvi Z, Woldmar N, et al. In‐depth proteomic analysis reveals unique subtype‐specific signatures in human small‐cell lung cancer. Clin Transl Med. 2022;12:e1060. 10.1002/ctm2.1060**
 
 ## Study summary
 
@@ -53,7 +53,7 @@ A gct file with subtype-specific gene sets was prepared for ssGSEA. The ssGSEA w
 10. Sparse partial least squares discriminant analysis (**sPLSDA_CP.Rmd**, **sPLSDA_CM.Rmd** and **sPLSDA_results.Rmd**)
 
 The sPLS-DA was conducted separately for the CP and CM proteomic dataset (sPLSDA_CP.Rmd and sPLSDA_CM.Rmd). The results are summarized in sPLSDA_results.Rmd. 
-After selecting proteins that are potential IHC/blood-based biomarker candidates for the subtypes, the tissue transcriptomic dataset [1] was utilized to confirm our findings.
+After selecting proteins that are potential IHC/blood-based biomarker candidates for the subtypes, the tissue transcriptomic dataset [9] was utilized to confirm our findings.
 
 11. Drug response data retrieval and analysis (**Cancerrxgene_dataset_drug_response.Rmd**)
 
